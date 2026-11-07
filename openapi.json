@@ -1,0 +1,1263 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "TradePoint API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/stocks/search": {
+      "post": {
+        "operationId": "searchStocks",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Provider unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/watchlist": {
+      "get": {
+        "operationId": "getWatchlist",
+        "responses": {
+          "200": {
+            "description": "Watchlist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetWatchlistResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "addWatchlist",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddWatchlistRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Added",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddWatchlistResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Already present",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddWatchlistResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown stock",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/watchlist/{symbol}": {
+      "delete": {
+        "operationId": "removeWatchlist",
+        "parameters": [
+          {
+            "name": "symbol",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteWatchlistResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/account": {
+      "get": {
+        "x-implementation-status": "planned",
+        "operationId": "getAccount",
+        "responses": {
+          "200": {
+            "description": "Account summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountSummary"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/portfolio": {
+      "get": {
+        "x-implementation-status": "planned",
+        "operationId": "getPortfolio",
+        "responses": {
+          "200": {
+            "description": "Portfolio",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioSummary"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/orders": {
+      "post": {
+        "x-implementation-status": "planned",
+        "operationId": "placeOrder",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Order processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Idempotent replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency key conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "x-implementation-status": "planned",
+        "operationId": "listOrders",
+        "responses": {
+          "200": {
+            "description": "Order history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OrderResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transactions": {
+      "get": {
+        "x-implementation-status": "planned",
+        "operationId": "listTransactions",
+        "responses": {
+          "200": {
+            "description": "Transactions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Transaction"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/news": {
+      "get": {
+        "x-implementation-status": "planned",
+        "operationId": "searchNews",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "symbol",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "News results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewsSearchResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "News provider unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/news/{article_id}": {
+      "get": {
+        "x-implementation-status": "planned",
+        "operationId": "getNewsArticle",
+        "parameters": [
+          {
+            "name": "article_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Article",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewsArticle"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Article not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/news/{article_id}/summary": {
+      "post": {
+        "x-implementation-status": "planned",
+        "operationId": "summarizeArticle",
+        "parameters": [
+          {
+            "name": "article_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SummaryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SummaryResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "LLM unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/research/suggestions": {
+      "post": {
+        "x-implementation-status": "planned",
+        "operationId": "getResearchSuggestions",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResearchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Research suggestions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Research provider unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AddWatchlistRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "symbol": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol"
+        ],
+        "title": "AddWatchlistRequest",
+        "type": "object"
+      },
+      "Quote": {
+        "additionalProperties": false,
+        "properties": {
+          "price": {
+            "title": "Price",
+            "type": "string"
+          },
+          "currency": {
+            "const": "INR",
+            "default": "INR",
+            "title": "Currency",
+            "type": "string"
+          },
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "simulated": {
+            "title": "Simulated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "price",
+          "as_of",
+          "simulated"
+        ],
+        "title": "Quote",
+        "type": "object"
+      },
+      "StockSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "exchange": {
+            "const": "NSE",
+            "title": "Exchange",
+            "type": "string"
+          },
+          "instrument_token": {
+            "exclusiveMinimum": 0,
+            "title": "Instrument Token",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "symbol",
+          "name",
+          "exchange",
+          "instrument_token"
+        ],
+        "title": "StockSummary",
+        "type": "object"
+      },
+      "WatchlistItem": {
+        "additionalProperties": false,
+        "properties": {
+          "stock": {
+            "$ref": "#/components/schemas/StockSummary"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Quote"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "stock",
+          "quote"
+        ],
+        "title": "WatchlistItem",
+        "type": "object"
+      },
+      "AddWatchlistResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/WatchlistItem"
+          },
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "item",
+          "created"
+        ],
+        "title": "AddWatchlistResponse",
+        "type": "object"
+      },
+      "DeleteWatchlistResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "deleted": {
+            "const": true,
+            "default": true,
+            "title": "Deleted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "symbol"
+        ],
+        "title": "DeleteWatchlistResponse",
+        "type": "object"
+      },
+      "ErrorDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Field"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorDetail",
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponse",
+        "type": "object"
+      },
+      "GetWatchlistResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WatchlistItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "GetWatchlistResponse",
+        "type": "object"
+      },
+      "SearchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "query": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          },
+          "limit": {
+            "default": 20,
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "SearchRequest",
+        "type": "object"
+      },
+      "SearchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/StockSummary"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "title": "SearchResponse",
+        "type": "object"
+      },
+      "AccountSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "currency": {
+            "const": "INR",
+            "title": "Currency",
+            "type": "string"
+          },
+          "cash_balance": {
+            "title": "Cash Balance",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_id",
+          "currency",
+          "cash_balance"
+        ],
+        "title": "AccountSummary",
+        "type": "object"
+      },
+      "Holding": {
+        "additionalProperties": false,
+        "properties": {
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "quantity": {
+            "title": "Quantity",
+            "type": "string"
+          },
+          "average_purchase_price": {
+            "title": "Average Purchase Price",
+            "type": "string"
+          },
+          "current_price": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Price"
+          },
+          "market_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Value"
+          },
+          "realized_pnl": {
+            "title": "Realized Pnl",
+            "type": "string"
+          },
+          "unrealized_pnl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unrealized Pnl"
+          },
+          "currency": {
+            "const": "INR",
+            "title": "Currency",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "name",
+          "quantity",
+          "average_purchase_price",
+          "current_price",
+          "market_value",
+          "realized_pnl",
+          "unrealized_pnl",
+          "currency"
+        ],
+        "title": "Holding",
+        "type": "object"
+      },
+      "PortfolioSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/AccountSummary"
+          },
+          "holdings": {
+            "items": {
+              "$ref": "#/components/schemas/Holding"
+            },
+            "title": "Holdings",
+            "type": "array"
+          },
+          "total_portfolio_value": {
+            "title": "Total Portfolio Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account",
+          "holdings",
+          "total_portfolio_value"
+        ],
+        "title": "PortfolioSummary",
+        "type": "object"
+      },
+      "OrderRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "symbol": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Symbol",
+            "type": "string"
+          },
+          "side": {
+            "enum": [
+              "BUY",
+              "SELL"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "quantity": {
+            "exclusiveMinimum": 0,
+            "maximum": 100000,
+            "title": "Quantity",
+            "type": "integer"
+          },
+          "order_type": {
+            "const": "MARKET",
+            "default": "MARKET",
+            "title": "Order Type",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "side",
+          "quantity",
+          "idempotency_key"
+        ],
+        "title": "OrderRequest",
+        "type": "object"
+      },
+      "OrderResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "order_id": {
+            "title": "Order Id",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "side": {
+            "enum": [
+              "BUY",
+              "SELL"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "quantity": {
+            "exclusiveMinimum": 0,
+            "maximum": 100000,
+            "title": "Quantity",
+            "type": "integer"
+          },
+          "order_type": {
+            "const": "MARKET",
+            "title": "Order Type",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "FILLED",
+              "REJECTED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "execution_price": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Price"
+          },
+          "currency": {
+            "const": "INR",
+            "title": "Currency",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "symbol",
+          "side",
+          "quantity",
+          "order_type",
+          "status",
+          "execution_price",
+          "currency",
+          "created_at"
+        ],
+        "title": "OrderResponse",
+        "type": "object"
+      },
+      "Transaction": {
+        "additionalProperties": false,
+        "properties": {
+          "transaction_id": {
+            "title": "Transaction Id",
+            "type": "string"
+          },
+          "order_id": {
+            "title": "Order Id",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "side": {
+            "enum": [
+              "BUY",
+              "SELL"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "quantity": {
+            "title": "Quantity",
+            "type": "string"
+          },
+          "price": {
+            "title": "Price",
+            "type": "string"
+          },
+          "gross_amount": {
+            "title": "Gross Amount",
+            "type": "string"
+          },
+          "currency": {
+            "const": "INR",
+            "title": "Currency",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "transaction_id",
+          "order_id",
+          "symbol",
+          "side",
+          "quantity",
+          "price",
+          "gross_amount",
+          "currency",
+          "occurred_at"
+        ],
+        "title": "Transaction",
+        "type": "object"
+      },
+      "NewsArticle": {
+        "additionalProperties": false,
+        "properties": {
+          "article_id": {
+            "title": "Article Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "symbols": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Symbols",
+            "type": "array"
+          }
+        },
+        "required": [
+          "article_id",
+          "title",
+          "source",
+          "url",
+          "published_at",
+          "summary",
+          "symbols"
+        ],
+        "title": "NewsArticle",
+        "type": "object"
+      },
+      "NewsSearchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "articles": {
+            "items": {
+              "$ref": "#/components/schemas/NewsArticle"
+            },
+            "title": "Articles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "articles"
+        ],
+        "title": "NewsSearchResponse",
+        "type": "object"
+      },
+      "SummaryRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "maxLength": 30000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "SummaryRequest",
+        "type": "object"
+      },
+      "SummaryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "article_id": {
+            "title": "Article Id",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "article_id",
+          "summary",
+          "provider"
+        ],
+        "title": "SummaryResponse",
+        "type": "object"
+      },
+      "ResearchSuggestion": {
+        "additionalProperties": false,
+        "properties": {
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "thesis": {
+            "title": "Thesis",
+            "type": "string"
+          },
+          "risks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Risks",
+            "type": "array"
+          },
+          "evidence_article_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Article Ids",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "informational_only": {
+            "const": true,
+            "default": true,
+            "title": "Informational Only",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "symbol",
+          "thesis",
+          "risks",
+          "evidence_article_ids",
+          "generated_at"
+        ],
+        "title": "ResearchSuggestion",
+        "type": "object"
+      },
+      "ResearchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchSuggestion"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          },
+          "disclaimer": {
+            "title": "Disclaimer",
+            "type": "string"
+          }
+        },
+        "required": [
+          "suggestions",
+          "disclaimer"
+        ],
+        "title": "ResearchResponse",
+        "type": "object"
+      },
+      "ResearchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "question": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          },
+          "symbols": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Symbols",
+            "type": "array"
+          }
+        },
+        "required": [
+          "question",
+          "symbols"
+        ],
+        "title": "ResearchRequest",
+        "type": "object"
+      }
+    }
+  }
+}

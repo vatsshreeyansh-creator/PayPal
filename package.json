@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "scripts": {
+    "contracts:openapi": "py scripts/export_openapi.py",
+    "contracts:types": "npm run contracts:openapi && openapi-typescript openapi.json -o static/api-types.d.ts",
+    "check": "npm run contracts:types && py -m unittest discover -s tests -v"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.6.1"
+  }
+}
