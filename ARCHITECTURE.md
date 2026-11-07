@@ -173,7 +173,7 @@ Avoid assigning different owners to `app.py`, `schemas.py`, and `models.py` in t
 
 ## 12. Current implementation status
 
-The watchlist API and UI remain implemented. Account/portfolio and simulated trading APIs are implemented. News ingestion, article retrieval, mock AI summary, and mock research APIs are implemented. Production news/LLM integrations and news/research UI are not implemented.
+The watchlist, account/portfolio, simulated trading, news/article, mock summary, and research APIs are implemented. The frontend shell now wires available APIs across these sections; historical charting and standalone market quote views remain placeholders. Production Kite/news/LLM integrations are not implemented.
 
 ## 13. Ready-to-use developer task briefs
 

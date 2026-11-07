@@ -1,6 +1,6 @@
-# TradePoint Watchlist MVP
+# TradePoint Research Workspace
 
-A small Flask + SQLAlchemy + SQLite demo. The market data provider is deterministic mock data; **every returned quote is simulated, not live**. No Kite credentials or trading functions are used.
+A Flask + SQLAlchemy + SQLite demo with a Jinja/Bootstrap/vanilla-JavaScript frontend. Market data defaults to deterministic mock prices. Orders update only the TradePoint paper account; no broker execution or Kite credentials are used.
 
 ## Run locally
 
@@ -35,10 +35,10 @@ Errors use `{"error":{"code":"...","message":"...","field":null}}`. A missing qu
 
 ## Data flow
 
-The Flask routes validate JSON with Pydantic and call `services.py`. The service talks to the provider through `MarketDataProvider` and persists instruments and watchlist membership through SQLAlchemy. The local instrument table is initialized from the mock provider at startup; watchlist membership and the instrument cache persist in SQLite. The template uses fetch/AJAX without full-page reloads.
+The Flask routes validate API data with Pydantic and call the module-level services. Services use normalized provider interfaces and persist domain data through SQLAlchemy. The frontend is a navigable Jinja-rendered shell and uses fetch/AJAX without full-page reloads. Watchlist, account, portfolio, trading, orders, news, summaries, and research use existing APIs. Historical charts and daily P&L are placeholders because no historical price API exists.
 
 To replace the mock provider later, implement `search_stocks` and `get_quotes` behind the same interface and provide normalized `InstrumentData`/`QuoteData`. Keep Kite field mapping inside that adapter; this MVP deliberately contains no Kite response-field assumptions.
 
 ## Contract checks
 
-Install the JS development tool once with `npm install`, then run `npm run check` before merging. This regenerates `openapi.json` from Pydantic models, regenerates `static/api-types.d.ts`, and runs Python contract/integration tests. Do not edit generated artifacts by hand. The OpenAPI paths list only implemented watchlist routes; account, portfolio, trading, news, summaries, and research currently have reusable schema components only and no live endpoints.
+Install the JS development tool once with `npm install`, then run `npm run check` before merging. It verifies that committed `openapi.json` and `static/api-types.d.ts` match generated output and runs Python contract/integration tests without rewriting files. Use `npm run contracts:types` to intentionally regenerate those artifacts after an agreed API contract change. Do not edit generated artifacts by hand.

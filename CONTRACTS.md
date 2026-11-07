@@ -227,6 +227,7 @@ Validation error examples must be deterministic, e.g. `{"error":{"code":"VALIDAT
 
 ## 8. Frontend contract
 
+- The current Jinja/vanilla-JavaScript shell reads and sends only fields in `openapi.json`; `static/api-types.d.ts` is generated for editor/reference use. No TypeScript build is used.
 - Search sends `POST /api/stocks/search` `{query: string, limit: 20}`; reads `results[]` and uses `name`, `symbol`.
 - Selecting a result sends `POST /api/watchlist` `{symbol: string}`; treats both 200 and 201 as success; reads `item` if needed and refreshes via GET.
 - Initial load and refresh send `GET /api/watchlist`; reads `items[]`, each containing `stock` and nullable `quote`.
@@ -235,15 +236,17 @@ Validation error examples must be deterministic, e.g. `{"error":{"code":"VALIDAT
 - For any non-2xx response, parse common error envelope and display `error.message`; malformed/non-JSON network responses get a generic client fallback.
 - Continue safe DOM insertion with `textContent`; no page reload required.
 
+The shell also consumes `GET /api/account`, `GET /api/portfolio`, `POST /api/orders`, `GET /api/orders`, `GET /api/transactions`, `GET /api/news`, `GET /api/news/{article_id}`, `POST /api/news/{article_id}/summary`, and `POST /api/research/suggestions`. Daily P&L, portfolio performance history, standalone market quotes/history, and other unsupported data are explicit placeholders because no corresponding API fields or routes exist.
+
 ## 9. Implementation status
 
-The watchlist, account/portfolio read APIs, simulated order and transaction APIs, news feed/article retrieval, cached AI summaries, and stock research suggestions are implemented. Mock market, news, and LLM providers are used by default and can be injected through `create_app`. Production Kite/news/LLM adapters and non-watchlist frontend flows remain unimplemented. OpenAPI and TypeScript declarations cover the live HTTP API. `npm run check` verifies committed generated artifacts and tests without rewriting files. Run `npm run contracts:types` only when intentionally regenerating artifacts after an agreed contract change.
+The watchlist, account/portfolio read APIs, simulated order and transaction APIs, news feed/article retrieval, cached AI summaries, and stock research suggestions are implemented. Mock market, news, and LLM providers are used by default and can be injected through `create_app`. The frontend shell connects available APIs; chart history, daily P&L, and standalone quote information remain placeholders. Production Kite/news/LLM adapters are unimplemented. OpenAPI and TypeScript declarations cover the live HTTP API. `npm run check` verifies committed generated artifacts and backend tests without rewriting them. Run `npm run contracts:types` only when intentionally regenerating artifacts after an agreed contract change.
 
 ## 10. Module ownership boundaries
 
 | Area | Primary modules | Boundary |
 |---|---|---|
-| Browser UI | `templates/index.html`, `static/api-types.d.ts` | Calls HTTP endpoints; it does not call providers or access the database. The current page implements watchlist only. |
+| Browser UI | `templates/index.html`, `static/styles.css`, `static/app.js`, `static/api-types.d.ts` | Calls HTTP endpoints; it does not call providers or access the database. Available backend flows are wired; unsupported data is shown as a placeholder. |
 | HTTP and validation | `app.py`, `schemas.py` | Routes parse requests, validate with Pydantic, call services, and serialize common errors. |
 | Domain orchestration | `services.py`, `portfolio_service.py`, `trading_service.py`, `news_research_service.py` | Module-level functions receive sessions/providers explicitly and return Pydantic models or raise domain/provider exceptions. |
 | Persistence | `models.py`, `database.py` | SQLAlchemy schema and engine/session setup. |
