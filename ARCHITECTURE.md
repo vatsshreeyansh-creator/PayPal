@@ -10,18 +10,22 @@ The repository is a compact Flask modular application, not a package-based appli
 
 | Existing file | Current role |
 |---|---|
-| `app.py` | Flask app factory and four watchlist/search routes; initializes DB and seeds the provider at startup; common JSON errors. |
+| `app.py` | Flask app factory, API routes, DB/account initialization, and common JSON errors. |
 | `services.py` | Search/cache, watchlist add/list/delete, quote mapping. |
+| `portfolio_service.py` | Demo-account initialization/read and read-only holdings/portfolio valuation. |
+| `trading_service.py` | Idempotent simulated orders, atomic account/holding/cash-ledger updates, and transaction reads. |
+| `news_research_service.py` | News pagination/persistence/deduplication, article retrieval, cached summaries, research orchestration. |
+| `news_provider.py`, `llm_provider.py` | Normalized provider Protocols; deterministic local mocks are in `mock_research_providers.py`. |
 | `provider.py` | `MarketDataProvider`, normalized `InstrumentData`/`QuoteData`, mock market data, `ProviderUnavailable`. |
 | `schemas.py` | Pydantic request/response validation. |
-| `models.py` | SQLAlchemy `Instrument` and `WatchlistEntry`. |
+| `models.py` | SQLAlchemy instrument, watchlist, account, holdings, order, transaction, and cash-ledger tables. |
 | `database.py` | Shared engine/session and SQLite foreign-key setup. |
 | `config.py` | Database URL, demo user ID, secret key. |
 | `templates/index.html` | One-page Bootstrap/vanilla JS watchlist interface. |
 | `CONTRACTS.md` | Approved watchlist contracts and ownership proposal. |
 | `README.md`, `requirements.txt` | Run and dependency instructions. |
 
-The implementation is currently a single-user demo with persistent SQLite storage and simulated quotes. There are no account, cash, holding, order, trade, or transaction-history tables or endpoints. Do not treat those product areas as implemented.
+The implementation is a single-user demo with persistent SQLite storage and simulated quotes. Account and holdings persistence plus account/portfolio read APIs are implemented. Holdings are currently seeded only by controlled setup/tests until trading exists. There are still no order, trade, or transaction-history tables or endpoints. Do not treat trading or execution as implemented.
 
 ## 2. Recommended architecture: keep the modular monolith
 
@@ -63,13 +67,15 @@ Suggested future module names: `services.py` can initially remain for watchlist;
 
 Keep existing `instruments` and `watchlist_entries` as specified in `CONTRACTS.md`. Add tables in feature-specific migrations or a deliberate development database reset; `Base.metadata.create_all()` does not migrate existing schemas.
 
-| Future table | Purpose and important constraints |
+| Table | Purpose and important constraints/status |
 |---|---|
-| `accounts` | Demo account identity and currency. Unique stable account/user key. No authentication implied. |
-| `cash_ledger_entries` | Append-only cash movements with signed `NUMERIC`/decimal amount, reason, timestamp, and optional order reference. Balance is sum of entries, or a cached balance updated in the same transaction. Choose one authoritative approach before coding. |
-| `orders` | User/account, symbol/instrument, side, quantity, order type, requested price if applicable, status, idempotency key, created/updated times. Unique `(account_id, idempotency_key)` prevents replayed submissions. |
-| `trades` | Executed fill facts: order, instrument, side, quantity, execution price, timestamp. Keep immutable after execution except explicit correction records. |
-| `holdings` (optional projection) | Current quantity and average cost per account/instrument. If persisted, update in same transaction as trade/cash ledger, and provide a reconciliation path from trades. Avoid maintaining the same truth in two places without tests. |
+| `accounts` | **Implemented.** Demo account identity, INR currency, and persisted initial cash. Unique account key; no authentication implied. |
+| `cash_ledger_entries` | **Implemented.** Append-only cash movements with signed `NUMERIC` amount, entry type, timestamp, idempotency key, and optional order reference. Balance is the sum of opening cash plus ledger deltas. |
+| `orders` | **Implemented.** Account/instrument, side, quantity, market type, status, idempotency key, execution price/rejection reason, timestamp. Unique `(account_id, idempotency_key)`. |
+| `transactions` | **Implemented.** Immutable completed fill facts: unique order, instrument, side, quantity, price, gross amount, timestamp. Rejected orders have no transaction. |
+| `news_articles` | **Implemented.** Normalized article metadata/content with unique canonical URL and unique `(source, provider_article_id)`. Symbols are stored as JSON. |
+| `article_summaries` | **Implemented.** One structured cached AI summary per article. |
+| `holdings` | **Implemented foundation.** Account/instrument, positive whole-share quantity, average purchase price, realized P/L. No trading service mutates it yet. When trading is implemented, define transactions as source of truth and holdings as a transactionally updated projection. |
 | `watchlist_entries` | Existing membership table; do not infer ownership from membership. |
 
 Use `Decimal` in Python and SQL `NUMERIC` for money and share quantities; never use float. Ensure serialized API money follows a single chosen string format (recommend fixed two-decimal strings for INR amounts, consistent with `CONTRACTS.md`). Quantities need a separately chosen decimal scale if fractional shares are supported; do not assume integer shares until decided.
@@ -82,10 +88,13 @@ A simulated market/limit execution must be one SQLAlchemy transaction: validate 
 
 Keep existing four watchlist routes and response bodies unchanged unless an intentional breaking contract revision is approved. Future endpoint groups should be additive and described in Pydantic schemas before independent implementation. Suggested resource boundaries (names are proposals, not finalized schemas):
 
-- Account read: account summary and available cash.
-- Portfolio read: holdings plus valuation/P&L summary.
-- Orders: submit, retrieve status, list history.
-- Trades/transactions: read-only history.
+- `GET /api/account`: implemented account summary and available cash.
+- `GET /api/portfolio`: implemented holdings plus valuation/P&L summary.
+- `POST /api/orders`, `GET /api/orders`, and `GET /api/orders/{order_id}`: implemented submit/retrieve/history.
+- `GET /api/transactions`: implemented fill history.
+- `GET /api/news`: implemented personal or general market feed with provider cursor pagination.
+- `GET /api/news/{article_id}` and `POST /api/news/{article_id}/summary`: implemented metadata/content retrieval and cached structured summary.
+- `POST /api/research/suggestions`: implemented symbol-specific mock-backed orchestration with article evidence IDs.
 - Watchlist: existing routes.
 
 Before coding each group, define exact JSON field names/types, Decimal wire serialization, nullable quote semantics, status enum values/transitions, error codes/statuses, idempotency behavior, and service signatures. Keep `instrument_token` internal or public consistently with the existing approved contract. Use the common error envelope already established in `CONTRACTS.md` for all APIs.
@@ -99,7 +108,7 @@ These are explicit MVP assumptions for contract-compatible parallel implementati
 3. **Costs:** INR, no fees/taxes/slippage in this MVP. Round monetary values to two decimals using decimal half-up; reject a quote that rounds to zero.
 4. **Quantity:** Positive whole shares, integer quantity, maximum 100,000 per order. Fractional shares are unsupported.
 5. **Cash:** One demo account, starting cash INR 1,000,000.00, configured/reset only through development setup; no deposit/withdrawal API. Available cash equals ledger-derived cash because orders execute immediately and none remain pending.
-6. **Holdings:** Source of truth is immutable executed transactions. A holdings table, if later added for performance, is a rebuildable projection. Average cost uses weighted average; selling reduces average-cost inventory and realized P/L is `(sell price - average cost) * sold quantity`. Unrealized P/L is `(latest price - average cost) * current quantity`.
+6. **Holdings:** Completed transactions are immutable; the persisted holdings row is the current projection updated atomically with each transaction. Average cost uses weighted average with six internal decimal places; API monetary values remain two-decimal INR strings. Selling reduces average-cost inventory and realized P/L is `(sell price - average cost) * sold quantity`. Unrealized P/L is `(latest price - average cost) * current quantity`.
 7. **Buy/sell:** Buy requires enough cash for gross amount; sell requires enough owned whole shares. Rejected attempts create a `REJECTED` order record with no trade and no cash/holding mutation. Accepted attempts create one `FILLED` order and exactly one transaction/fill.
 8. **Statuses:** `FILLED` and `REJECTED` only. No `PENDING` state under synchronous immediate-fill behavior.
 9. **Idempotency:** Client supplies a nonempty idempotency key (1–128 chars), unique per demo account for the lifetime of the order. A repeated key with same canonical request returns the stored order result; same key with different request returns conflict and does not mutate state.
@@ -111,11 +120,11 @@ The source brief was truncated after “Trading will initially use simulated”.
 
 ## 7. Machine-checkable contract foundation
 
-`schemas.py` is the shared source for Pydantic API structures. `scripts/export_openapi.py` emits `openapi.json` for implemented watchlist routes and proposed account, portfolio, trading, news, summarization, and research operations. Proposed operations carry `x-implementation-status: planned`; they define client shapes but are not live endpoints.
+`schemas.py` is the shared source for Pydantic API structures. `scripts/export_openapi.py` emits `openapi.json` for implemented watchlist, account, portfolio, trading, news, summarization, and research routes.
 
 `npm run contracts:types` regenerates `static/api-types.d.ts` from OpenAPI using `openapi-typescript`. Do not hand-edit generated files. `npm run check` regenerates OpenAPI and frontend types and runs Python contract tests. CI runs this command on pushes and pull requests. The current vanilla JavaScript is checked against its endpoint names and field references by a contract test; it is not statically type-checked as TypeScript.
 
-Normalized integration seams are `MarketDataProvider` in `provider.py`, `NewsProvider` in `news_provider.py`, `LLMProvider` in `llm_provider.py`, and service Protocols in `service_contracts.py`. These are interfaces only; news and LLM adapters, services, endpoints, and UI are not implemented.
+Normalized integration seams are `MarketDataProvider` in `provider.py`, `NewsProvider` in `news_provider.py`, `LLMProvider` in `llm_provider.py`, and service Protocols in `service_contracts.py`. Deterministic mock news/LLM providers and backend orchestration are implemented; production external adapters and UI remain out of scope.
 
 ## 8. Remaining decisions
 
@@ -164,7 +173,7 @@ Avoid assigning different owners to `app.py`, `schemas.py`, and `models.py` in t
 
 ## 12. Current implementation status
 
-The existing watchlist app and its prior smoke-checked API are the only implemented feature slice. Search/add/list/delete, mock quote retrieval, SQLite persistence, and frontend interactions exist. Portfolio/account balances, holdings, P/L, orders, simulated fills, transaction history, and any order idempotency logic do not exist yet. This document prepares boundaries only; it does not claim those features are implemented or that the unresolved trading decisions are settled.
+The watchlist API and UI remain implemented. Account/portfolio and simulated trading APIs are implemented. News ingestion, article retrieval, mock AI summary, and mock research APIs are implemented. Production news/LLM integrations and news/research UI are not implemented.
 
 ## 13. Ready-to-use developer task briefs
 

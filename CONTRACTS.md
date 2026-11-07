@@ -235,3 +235,95 @@ These do not block implementation of the above contract; defer unless product re
 3. Quote timeout/retry policy and provider rate limits. For now adapter must use bounded timeouts; exact values can be chosen in provider implementation and documented there.
 4. Whether public clients ultimately need `instrument_token`. Keep it for compatibility in this milestone; revisiting is a versioned API decision.
 5. Any future authentication/multiple users or live Kite credentials. Both are explicitly outside this milestone.
+
+## 12. Account and portfolio read APIs (implemented)
+
+This additive slice preserves all watchlist routes and response structures.
+
+### `GET /api/account`
+
+No request body. Returns HTTP 200:
+
+```json
+{"account_id":"demo-user","currency":"INR","cash_balance":"1000000.00"}
+```
+
+`account_id` is the configured demo user ID; `currency` is `INR`; `cash_balance` is a nonnegative decimal string with exactly two fractional digits. The opening balance is initialized from `initial_cash`; after trading, balance is the sum of opening cash and cash-ledger deltas.
+
+### `GET /api/portfolio`
+
+No request body. Returns HTTP 200:
+
+```json
+{"account":{"account_id":"demo-user","currency":"INR","cash_balance":"1000000.00"},"holdings":[],"total_portfolio_value":"1000000.00"}
+```
+
+Each holding contains `symbol`, `name`, `quantity` (positive whole-share count serialized as a base-10 string), `average_purchase_price`, nullable `current_price`, nullable `market_value`, `realized_pnl`, nullable `unrealized_pnl`, and `currency`. Monetary values are decimal strings with exactly two fractional digits. Total portfolio value is cash plus available holding market values. If any holding lacks a quote, its current price, market value, and unrealized P/L are null and `total_portfolio_value` is null because a complete total cannot be calculated. Saved holdings and cash remain in the response.
+
+Both endpoints use the standard `ErrorResponse` with HTTP 500 for database or unexpected errors. Quote-provider unavailability is treated as missing quote data, not as a failed portfolio request. Initial cash is read from `TRADEPOINT_INITIAL_CASH` (default `1000000.00`) only when creating the persisted demo account; it does not overwrite an existing account. Holdings link to the account and the existing `instruments` rows.
+
+## 14. News and AI research APIs (implemented with mock providers)
+
+### `GET /api/news`
+
+Query parameters: `scope` is `personal` (default) or `market`; optional `query` is trimmed nonempty text up to 200 characters; optional repeated `symbols` filters results; `page_size` defaults to 20 and is 1–50; `page_token` is an opaque provider cursor. In `personal` scope, the backend derives the account’s watched and owned symbols, intersects any explicit symbol filter, and returns only articles associated with those symbols. No associated symbols returns an empty page. `market` scope searches the general equities feed.
+
+200 response: `{"articles":[{"article_id":"...","title":"...","source":"...","url":"...","published_at":"2026-11-07T09:00:00Z","summary":null,"symbols":["TCS"],"content":null}],"scope":"personal","next_page_token":null}`. Article content and summary are independently nullable. Article `symbols` is the normalized list of relevant stock symbols. Provider pagination order is retained; results are persisted and de-duplicated by canonical URL (tracking parameters and URL fragments are omitted), with source/provider ID as a secondary unique key.
+
+Errors: 400 `VALIDATION_ERROR`; 503 `NEWS_PROVIDER_UNAVAILABLE`; 500 `INTERNAL_ERROR`.
+
+### `GET /api/news/{article_id}`
+
+Returns the same `NewsArticle` shape. It attempts to retrieve missing content from the originating provider; provider unavailability or absent content leaves `content: null` and still returns metadata. Unknown internal article ID is 404 `ARTICLE_NOT_FOUND`.
+
+### `POST /api/news/{article_id}/summary`
+
+No body. Returns `SummaryResponse` with `article_id`, `summary`, `key_developments`, `reported_facts`, `positive_implications`, `negative_implications`, `disclaimer`, and `provider`. Facts and generated implications are separate arrays. Results are cached per article. Unknown article is 404; no source content and no source summary is 422 `ARTICLE_CONTENT_UNAVAILABLE`; LLM outage is 503 `LLM_PROVIDER_UNAVAILABLE`.
+
+### `POST /api/research/suggestions`
+
+Request `{"symbol":"TCS"}`. Returns `{"suggestions":[{"symbol":"TCS","thesis":"...","risks":[],"evidence_article_ids":["..."],"generated_at":"...Z","reported_facts":[],"positive_implications":[],"negative_implications":[],"uncertainty":"...","informational_only":true}],"disclaimer":"..."}`. Backend fetches recent symbol-related news, attaches only internal article IDs actually provided as evidence to the LLM, and supplies an available simulated market quote as optional context. Unknown symbol is 404; news provider outage and LLM outage are 503; other failures are 500. This API is informational and does not mutate account, portfolio, order, or transaction state.
+
+### Provider boundaries
+
+`NewsProvider.search_articles(query, symbols, page_token, page_size) -> NewsPage` returns normalized provider articles and an opaque next token. `get_article(source, provider_article_id) -> ArticleData | None` retrieves details. `LLMProvider.summarize_article(ArticleInput) -> SummaryDraft` and `research_stock(symbol, current_price, evidence) -> ResearchDraft` return structured content; the backend adds internal evidence IDs, persistence, disclaimers, and API models. Provider-specific payloads remain inside adapter implementations. `NewsProviderUnavailable` and `LLMProviderUnavailable` are translated to the public error codes above.
+
+## 13. Simulated order and transaction APIs (implemented)
+
+All order requests are immediate `MARKET` orders for the configured demo account. Request `quantity` is a JSON integer from 1 through 100000. `symbol` is trimmed and uppercased. The required `idempotency_key` is a trimmed string of 1–128 characters.
+
+### `POST /api/orders`
+
+Request:
+
+```json
+{"symbol":"TCS","side":"BUY","quantity":2,"order_type":"MARKET","idempotency_key":"client-order-001"}
+```
+
+New order response uses HTTP 201, including business rejection:
+
+```json
+{"order_id":"uuid","symbol":"TCS","side":"BUY","quantity":2,"order_type":"MARKET","status":"FILLED","execution_price":"3865.25","rejection_reason":null,"currency":"INR","created_at":"2026-11-08T10:00:00Z"}
+```
+
+For business rejections, status is `REJECTED`, `execution_price` is null, and `rejection_reason` is one of `INSUFFICIENT_CASH`, `INSUFFICIENT_SHARES`, or `QUOTE_UNAVAILABLE`. Such an order is persisted, but creates no transaction, cash delta, or holding mutation. Unknown instrument is a 404 error rather than an order. A repeated key with the same canonical request returns the original body with HTTP 200; reuse with a different request returns HTTP 409 `IDEMPOTENCY_CONFLICT`.
+
+### `GET /api/orders` and `GET /api/orders/{order_id}`
+
+List returns an array of the same order response records, newest first. Item lookup returns one record. Missing item returns 404 `ORDER_NOT_FOUND`.
+
+### `GET /api/transactions`
+
+Returns a newest-first array:
+
+```json
+[{"transaction_id":"uuid","order_id":"uuid","symbol":"TCS","side":"BUY","quantity":"2","price":"3865.25","gross_amount":"7730.50","currency":"INR","occurred_at":"2026-11-08T10:00:00Z"}]
+```
+
+Transaction quantity is a positive whole-share decimal string; money uses exactly two fractional digits. Transactions exist only for filled orders.
+
+### Persistence and atomicity
+
+The `orders` table uniquely constrains `(account_id, idempotency_key)`. `transactions.order_id` is unique, allowing at most one fill per order. `cash_ledger_entries` has a unique `(account_id, entry_key)`; the opening balance is recorded once, and each filled order records one signed cash delta. Account cash is the sum of ledger amounts. Orders, fills, ledger changes, and holdings changes for a fill are committed in one transaction. SQLite uses `BEGIN IMMEDIATE` to serialize balance-changing requests in the supported single-process demo. Any unexpected persistence failure rolls the transaction back. A quote outage or absent quote is a persisted `REJECTED/QUOTE_UNAVAILABLE` order.
+
+The shared error envelope is unchanged. Trading-specific codes are `IDEMPOTENCY_CONFLICT` (409) and `ORDER_NOT_FOUND` (404); invalid JSON/schema is 400, unknown symbol is 404 `STOCK_NOT_FOUND`, and unexpected DB errors are 500 `INTERNAL_ERROR`. Insufficient cash/shares and quote absence are represented as persisted order status, not HTTP errors.

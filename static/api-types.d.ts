@@ -100,6 +100,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/orders/{order_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getOrder"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/transactions": {
         parameters: {
             query?: never;
@@ -321,7 +337,7 @@ export interface components {
             /** Holdings */
             holdings: components["schemas"]["Holding"][];
             /** Total Portfolio Value */
-            total_portfolio_value: string;
+            total_portfolio_value: string | null;
         };
         /** OrderRequest */
         OrderRequest: {
@@ -368,6 +384,8 @@ export interface components {
             status: "FILLED" | "REJECTED";
             /** Execution Price */
             execution_price: string | null;
+            /** Rejection Reason */
+            rejection_reason: ("INSUFFICIENT_CASH" | "INSUFFICIENT_SHARES" | "QUOTE_UNAVAILABLE") | null;
             /**
              * Currency
              * @constant
@@ -428,16 +446,49 @@ export interface components {
             summary: string | null;
             /** Symbols */
             symbols: string[];
+            /** Content */
+            content: string | null;
         };
         /** NewsSearchResponse */
         NewsSearchResponse: {
             /** Articles */
             articles: components["schemas"]["NewsArticle"][];
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "personal" | "market";
+            /** Next Page Token */
+            next_page_token: string | null;
         };
-        /** SummaryRequest */
-        SummaryRequest: {
-            /** Text */
-            text: string;
+        /** NewsFeedRequest */
+        NewsFeedRequest: {
+            /**
+             * Scope
+             * @default personal
+             * @enum {string}
+             */
+            scope: "personal" | "market";
+            /**
+             * Query
+             * @default null
+             */
+            query: string | null;
+            /**
+             * Symbols
+             * @default null
+             */
+            symbols: string[] | null;
+            /**
+             * Page Token
+             * @default null
+             */
+            page_token: string | null;
+            /**
+             * Page Size
+             * @default 20
+             */
+            page_size: number;
         };
         /** SummaryResponse */
         SummaryResponse: {
@@ -445,6 +496,16 @@ export interface components {
             article_id: string;
             /** Summary */
             summary: string;
+            /** Key Developments */
+            key_developments: string[];
+            /** Reported Facts */
+            reported_facts: string[];
+            /** Positive Implications */
+            positive_implications: string[];
+            /** Negative Implications */
+            negative_implications: string[];
+            /** Disclaimer */
+            disclaimer: string;
             /** Provider */
             provider: string;
         };
@@ -463,6 +524,14 @@ export interface components {
              * Format: date-time
              */
             generated_at: string;
+            /** Reported Facts */
+            reported_facts: string[];
+            /** Positive Implications */
+            positive_implications: string[];
+            /** Negative Implications */
+            negative_implications: string[];
+            /** Uncertainty */
+            uncertainty: string;
             /**
              * Informational Only
              * @default true
@@ -479,10 +548,8 @@ export interface components {
         };
         /** ResearchRequest */
         ResearchRequest: {
-            /** Question */
-            question: string;
-            /** Symbols */
-            symbols: string[];
+            /** Symbol */
+            symbol: string;
         };
     };
     responses: never;
@@ -755,8 +822,57 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Unknown stock */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Idempotency key conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderResponse"];
+                };
+            };
+            /** @description Order not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -788,10 +904,12 @@ export interface operations {
     };
     searchNews: {
         parameters: {
-            query: {
-                query: string;
-                symbol?: string[];
-                limit?: number;
+            query?: {
+                scope?: "personal" | "market";
+                query?: string;
+                symbols?: string[];
+                page_token?: string;
+                page_size?: number;
             };
             header?: never;
             path?: never;
@@ -806,6 +924,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NewsSearchResponse"];
+                };
+            };
+            /** @description Invalid query */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description News provider unavailable */
@@ -830,7 +957,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Article */
+            /** @description Article; content may be null */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -859,11 +986,7 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SummaryRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Summary */
             200: {
@@ -872,6 +995,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SummaryResponse"];
+                };
+            };
+            /** @description Article not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Article content unavailable */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description LLM unavailable */
@@ -905,6 +1046,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResearchResponse"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unknown stock */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Research provider unavailable */

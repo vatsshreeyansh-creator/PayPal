@@ -111,6 +111,13 @@ class AccountSummary(ContractModel):
     currency: Literal["INR"]
     cash_balance: str
 
+    @field_validator("cash_balance")
+    @classmethod
+    def valid_cash_balance(cls, value: str) -> str:
+        if not re.fullmatch(r"(?:0|[1-9]\d*)\.\d{2}", value):
+            raise ValueError("cash_balance must be a nonnegative INR decimal string with two fractional digits")
+        return value
+
 
 class Holding(ContractModel):
     symbol: str
@@ -123,19 +130,70 @@ class Holding(ContractModel):
     unrealized_pnl: str | None
     currency: Literal["INR"]
 
+    @field_validator("quantity")
+    @classmethod
+    def valid_holding_quantity(cls, value: str) -> str:
+        if not re.fullmatch(r"[1-9]\d*", value):
+            raise ValueError("quantity must be a positive whole-share string")
+        return value
+
+    @field_validator("average_purchase_price")
+    @classmethod
+    def valid_holding_money(cls, value: str) -> str:
+        if not re.fullmatch(r"(?:0|[1-9]\d*)\.\d{2}", value):
+            raise ValueError("holding monetary values must use two fractional digits")
+        return value
+
+    @field_validator("realized_pnl", "unrealized_pnl")
+    @classmethod
+    def valid_profit_loss(cls, value: str | None) -> str | None:
+        if value is not None and not re.fullmatch(r"-?(?:0|[1-9]\d*)\.\d{2}", value):
+            raise ValueError("profit/loss values must use two fractional digits")
+        return value
+
+    @field_validator("current_price", "market_value", "unrealized_pnl")
+    @classmethod
+    def valid_nullable_money(cls, value: str | None) -> str | None:
+        if value is not None and not re.fullmatch(r"(?:0|[1-9]\d*)\.\d{2}", value):
+            raise ValueError("holding monetary values must use two fractional digits")
+        return value
+
 
 class PortfolioSummary(ContractModel):
     account: AccountSummary
     holdings: list[Holding]
-    total_portfolio_value: str
+    total_portfolio_value: str | None
+
+    @field_validator("total_portfolio_value")
+    @classmethod
+    def valid_total_value(cls, value: str | None) -> str | None:
+        if value is not None and not re.fullmatch(r"(?:0|[1-9]\d*)\.\d{2}", value):
+            raise ValueError("total_portfolio_value must use two fractional digits")
+        return value
 
 
 class OrderRequest(ContractModel):
     symbol: str = Field(min_length=1, max_length=32)
     side: Literal["BUY", "SELL"]
-    quantity: int = Field(gt=0, le=100000)
+    quantity: int = Field(gt=0, le=100000, strict=True)
     order_type: Literal["MARKET"] = "MARKET"
     idempotency_key: str = Field(min_length=1, max_length=128)
+
+    @field_validator("symbol")
+    @classmethod
+    def normalize_order_symbol(cls, value: str) -> str:
+        value = value.strip().upper()
+        if not value:
+            raise ValueError("symbol must not be empty")
+        return value
+
+    @field_validator("idempotency_key")
+    @classmethod
+    def normalize_idempotency_key(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("idempotency_key must not be empty")
+        return value
 
 class OrderResponse(ContractModel):
     order_id: str
@@ -145,8 +203,21 @@ class OrderResponse(ContractModel):
     order_type: Literal["MARKET"]
     status: Literal["FILLED", "REJECTED"]
     execution_price: str | None
+    rejection_reason: Literal["INSUFFICIENT_CASH", "INSUFFICIENT_SHARES", "QUOTE_UNAVAILABLE"] | None
     currency: Literal["INR"]
     created_at: datetime
+
+    @field_validator("execution_price")
+    @classmethod
+    def valid_execution_price(cls, value: str | None) -> str | None:
+        if value is not None and not re.fullmatch(r"(?:0|[1-9]\d*)\.\d{2}", value):
+            raise ValueError("execution_price must use two fractional digits")
+        return value
+
+    @field_serializer("created_at")
+    def serialize_created_at(self, value: datetime) -> str:
+        value = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+        return value.isoformat().replace("+00:00", "Z")
 
 class Transaction(ContractModel):
     transaction_id: str
@@ -173,6 +244,11 @@ class Transaction(ContractModel):
             raise ValueError("money must be a decimal string with two fractional digits")
         return value
 
+    @field_serializer("occurred_at")
+    def serialize_occurred_at(self, value: datetime) -> str:
+        value = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+        return value.isoformat().replace("+00:00", "Z")
+
 
 class NewsArticle(ContractModel):
     article_id: str
@@ -182,19 +258,60 @@ class NewsArticle(ContractModel):
     published_at: datetime
     summary: str | None
     symbols: list[str]
+    content: str | None
+
+    @field_validator("published_at")
+    @classmethod
+    def normalize_published_at(cls, value: datetime) -> datetime:
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+    @field_serializer("published_at")
+    def serialize_published_at(self, value: datetime) -> str:
+        return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 class NewsSearchResponse(ContractModel):
     articles: list[NewsArticle]
+    scope: Literal["personal", "market"]
+    next_page_token: str | None
 
 
-class SummaryRequest(ContractModel):
-    text: str = Field(min_length=1, max_length=30000)
+class NewsFeedRequest(ContractModel):
+    scope: Literal["personal", "market"] = "personal"
+    query: str | None = Field(default=None, min_length=1, max_length=200)
+    symbols: list[str] | None = Field(default=None, max_length=20)
+    page_token: str | None = None
+    page_size: int = Field(default=20, ge=1, le=50)
+
+    @field_validator("query")
+    @classmethod
+    def clean_news_query(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            raise ValueError("query must not be empty")
+        return value
+
+    @field_validator("symbols")
+    @classmethod
+    def normalize_news_symbols(cls, values: list[str] | None) -> list[str] | None:
+        if values is None:
+            return None
+        normalized = list(dict.fromkeys(value.strip().upper() for value in values if value.strip()))
+        if not normalized:
+            raise ValueError("symbols must contain at least one symbol")
+        return normalized
 
 
 class SummaryResponse(ContractModel):
     article_id: str
     summary: str
+    key_developments: list[str]
+    reported_facts: list[str]
+    positive_implications: list[str]
+    negative_implications: list[str]
+    disclaimer: str
     provider: str
 
 
@@ -204,7 +321,16 @@ class ResearchSuggestion(ContractModel):
     risks: list[str]
     evidence_article_ids: list[str]
     generated_at: datetime
+    reported_facts: list[str]
+    positive_implications: list[str]
+    negative_implications: list[str]
+    uncertainty: str
     informational_only: Literal[True] = True
+
+    @field_serializer("generated_at")
+    def serialize_generated_at(self, value: datetime) -> str:
+        value = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+        return value.isoformat().replace("+00:00", "Z")
 
 
 class ResearchResponse(ContractModel):
@@ -213,5 +339,12 @@ class ResearchResponse(ContractModel):
 
 
 class ResearchRequest(ContractModel):
-    question: str = Field(min_length=1, max_length=2000)
-    symbols: list[str] = Field(min_length=1, max_length=20)
+    symbol: str = Field(min_length=1, max_length=32)
+
+    @field_validator("symbol")
+    @classmethod
+    def normalize_research_symbol(cls, value: str) -> str:
+        value = value.strip().upper()
+        if not value:
+            raise ValueError("symbol must not be empty")
+        return value

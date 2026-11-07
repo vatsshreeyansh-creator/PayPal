@@ -165,7 +165,6 @@
     },
     "/api/account": {
       "get": {
-        "x-implementation-status": "planned",
         "operationId": "getAccount",
         "responses": {
           "200": {
@@ -193,7 +192,6 @@
     },
     "/api/portfolio": {
       "get": {
-        "x-implementation-status": "planned",
         "operationId": "getPortfolio",
         "responses": {
           "200": {
@@ -221,7 +219,6 @@
     },
     "/api/orders": {
       "post": {
-        "x-implementation-status": "planned",
         "operationId": "placeOrder",
         "requestBody": {
           "required": true,
@@ -264,8 +261,28 @@
               }
             }
           },
+          "404": {
+            "description": "Unknown stock",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Idempotency key conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
             "content": {
               "application/json": {
                 "schema": {
@@ -277,7 +294,6 @@
         }
       },
       "get": {
-        "x-implementation-status": "planned",
         "operationId": "listOrders",
         "responses": {
           "200": {
@@ -296,9 +312,45 @@
         }
       }
     },
+    "/api/orders/{order_id}": {
+      "get": {
+        "operationId": "getOrder",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Order not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/transactions": {
       "get": {
-        "x-implementation-status": "planned",
         "operationId": "listTransactions",
         "responses": {
           "200": {
@@ -319,19 +371,32 @@
     },
     "/api/news": {
       "get": {
-        "x-implementation-status": "planned",
         "operationId": "searchNews",
         "parameters": [
           {
-            "name": "query",
+            "name": "scope",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "enum": [
+                "personal",
+                "market"
+              ],
+              "default": "personal"
             }
           },
           {
-            "name": "symbol",
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "symbols",
             "in": "query",
             "required": false,
             "schema": {
@@ -342,14 +407,22 @@
             }
           },
           {
-            "name": "limit",
+            "name": "page_token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page_size",
             "in": "query",
             "required": false,
             "schema": {
               "type": "integer",
               "default": 20,
               "minimum": 1,
-              "maximum": 100
+              "maximum": 50
             }
           }
         ],
@@ -360,6 +433,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/NewsSearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -379,7 +462,6 @@
     },
     "/api/news/{article_id}": {
       "get": {
-        "x-implementation-status": "planned",
         "operationId": "getNewsArticle",
         "parameters": [
           {
@@ -393,7 +475,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Article",
+            "description": "Article; content may be null",
             "content": {
               "application/json": {
                 "schema": {
@@ -417,7 +499,6 @@
     },
     "/api/news/{article_id}/summary": {
       "post": {
-        "x-implementation-status": "planned",
         "operationId": "summarizeArticle",
         "parameters": [
           {
@@ -429,16 +510,6 @@
             }
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SummaryRequest"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "Summary",
@@ -446,6 +517,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SummaryResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Article not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Article content unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -465,7 +556,6 @@
     },
     "/api/research/suggestions": {
       "post": {
-        "x-implementation-status": "planned",
         "operationId": "getResearchSuggestions",
         "requestBody": {
           "required": true,
@@ -484,6 +574,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ResearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown stock",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -860,8 +970,15 @@
             "type": "array"
           },
           "total_portfolio_value": {
-            "title": "Total Portfolio Value",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Portfolio Value"
           }
         },
         "required": [
@@ -966,6 +1083,22 @@
             ],
             "title": "Execution Price"
           },
+          "rejection_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "INSUFFICIENT_CASH",
+                  "INSUFFICIENT_SHARES",
+                  "QUOTE_UNAVAILABLE"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejection Reason"
+          },
           "currency": {
             "const": "INR",
             "title": "Currency",
@@ -985,6 +1118,7 @@
           "order_type",
           "status",
           "execution_price",
+          "rejection_reason",
           "currency",
           "created_at"
         ],
@@ -1092,6 +1226,17 @@
             },
             "title": "Symbols",
             "type": "array"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
           }
         },
         "required": [
@@ -1101,7 +1246,8 @@
           "url",
           "published_at",
           "summary",
-          "symbols"
+          "symbols",
+          "content"
         ],
         "title": "NewsArticle",
         "type": "object"
@@ -1115,28 +1261,98 @@
             },
             "title": "Articles",
             "type": "array"
+          },
+          "scope": {
+            "enum": [
+              "personal",
+              "market"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "next_page_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Page Token"
           }
         },
         "required": [
-          "articles"
+          "articles",
+          "scope",
+          "next_page_token"
         ],
         "title": "NewsSearchResponse",
         "type": "object"
       },
-      "SummaryRequest": {
+      "NewsFeedRequest": {
         "additionalProperties": false,
         "properties": {
-          "text": {
-            "maxLength": 30000,
-            "minLength": 1,
-            "title": "Text",
+          "scope": {
+            "default": "personal",
+            "enum": [
+              "personal",
+              "market"
+            ],
+            "title": "Scope",
             "type": "string"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Query"
+          },
+          "symbols": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Symbols"
+          },
+          "page_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page Token"
+          },
+          "page_size": {
+            "default": 20,
+            "maximum": 50,
+            "minimum": 1,
+            "title": "Page Size",
+            "type": "integer"
           }
         },
-        "required": [
-          "text"
-        ],
-        "title": "SummaryRequest",
+        "title": "NewsFeedRequest",
         "type": "object"
       },
       "SummaryResponse": {
@@ -1150,6 +1366,38 @@
             "title": "Summary",
             "type": "string"
           },
+          "key_developments": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Key Developments",
+            "type": "array"
+          },
+          "reported_facts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reported Facts",
+            "type": "array"
+          },
+          "positive_implications": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Positive Implications",
+            "type": "array"
+          },
+          "negative_implications": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Negative Implications",
+            "type": "array"
+          },
+          "disclaimer": {
+            "title": "Disclaimer",
+            "type": "string"
+          },
           "provider": {
             "title": "Provider",
             "type": "string"
@@ -1158,6 +1406,11 @@
         "required": [
           "article_id",
           "summary",
+          "key_developments",
+          "reported_facts",
+          "positive_implications",
+          "negative_implications",
+          "disclaimer",
           "provider"
         ],
         "title": "SummaryResponse",
@@ -1193,6 +1446,31 @@
             "title": "Generated At",
             "type": "string"
           },
+          "reported_facts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reported Facts",
+            "type": "array"
+          },
+          "positive_implications": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Positive Implications",
+            "type": "array"
+          },
+          "negative_implications": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Negative Implications",
+            "type": "array"
+          },
+          "uncertainty": {
+            "title": "Uncertainty",
+            "type": "string"
+          },
           "informational_only": {
             "const": true,
             "default": true,
@@ -1205,7 +1483,11 @@
           "thesis",
           "risks",
           "evidence_article_ids",
-          "generated_at"
+          "generated_at",
+          "reported_facts",
+          "positive_implications",
+          "negative_implications",
+          "uncertainty"
         ],
         "title": "ResearchSuggestion",
         "type": "object"
@@ -1235,25 +1517,15 @@
       "ResearchRequest": {
         "additionalProperties": false,
         "properties": {
-          "question": {
-            "maxLength": 2000,
+          "symbol": {
+            "maxLength": 32,
             "minLength": 1,
-            "title": "Question",
+            "title": "Symbol",
             "type": "string"
-          },
-          "symbols": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 20,
-            "minItems": 1,
-            "title": "Symbols",
-            "type": "array"
           }
         },
         "required": [
-          "question",
-          "symbols"
+          "symbol"
         ],
         "title": "ResearchRequest",
         "type": "object"

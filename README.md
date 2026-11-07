@@ -13,7 +13,7 @@ py app.py
 
 Open <http://127.0.0.1:5000>. The SQLite database is created as `tradepoint.db` beside `app.py`.
 
-Configuration: `TRADEPOINT_DATABASE_URL`, `TRADEPOINT_DEMO_USER_ID`, and `TRADEPOINT_SECRET_KEY` are optional environment variables. One demo user is used; there is no authentication.
+Configuration: `TRADEPOINT_DATABASE_URL`, `TRADEPOINT_DEMO_USER_ID`, `TRADEPOINT_INITIAL_CASH` (default `1000000.00` INR), and `TRADEPOINT_SECRET_KEY` are optional environment variables. The initial cash value is used only when the account row is first created; changing the environment variable does not reset an existing account. One demo user is used; there is no authentication.
 
 ## JSON API
 
@@ -21,6 +21,15 @@ Configuration: `TRADEPOINT_DATABASE_URL`, `TRADEPOINT_DEMO_USER_ID`, and `TRADEP
 - `POST /api/watchlist` — `{"symbol":"TCS"}` (201 new, 200 duplicate)
 - `GET /api/watchlist`
 - `DELETE /api/watchlist/TCS`
+- `GET /api/account`
+- `GET /api/portfolio`
+- `POST /api/orders` — immediate simulated MARKET buy/sell
+- `GET /api/orders` and `GET /api/orders/{order_id}`
+- `GET /api/transactions`
+- `GET /api/news?scope=personal&page_size=20` — paginated watchlist/holdings news; use `scope=market` for general news
+- `GET /api/news/{article_id}`
+- `POST /api/news/{article_id}/summary`
+- `POST /api/research/suggestions` — `{"symbol":"TCS"}`
 
 Errors use `{"error":{"code":"...","message":"...","field":null}}`. A missing quote is represented by `quote: null`; saved membership remains available if quote retrieval fails. `quote.simulated` is always `true` for the mock provider.
 
