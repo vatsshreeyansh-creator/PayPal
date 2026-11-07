@@ -71,7 +71,9 @@ def place_order(session: Session, provider: MarketDataProvider, account_id: str,
         quote = provider.get_quotes([data]).get((instrument.exchange, instrument.symbol))
     except ProviderUnavailable:
         quote = None
-    price = _cash(Decimal(quote.price)) if quote is not None and quote.simulated else None
+    # Orders are always executed against TradePoint's internal paper ledger.
+    # The quote's simulated flag describes quote provenance, not execution mode.
+    price = _cash(Decimal(quote.price)) if quote is not None else None
     if price is not None and price <= 0:
         price = None
 

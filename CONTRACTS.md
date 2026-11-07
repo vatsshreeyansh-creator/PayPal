@@ -1,18 +1,18 @@
-# TradePoint Watchlist — Proposed Stable Contracts
+# TradePoint — Current Implementation Contracts
 
-**Purpose:** Single source of truth for the next implementation changes and parallel development. This document distinguishes current behavior from the proposed contract. The proposed contract resolves the audit issues below; it does not claim the current code already follows it. No application code is changed by this document.
+**Purpose:** This document records the behavior currently implemented by the repository. `schemas.py`, Flask routes, services, models, providers, and generated OpenAPI define the implementation; this document explains their shared interfaces. Update the implementation, OpenAPI, and generated frontend declarations together when changing a contract.
 
 ## Decision status
 
-The decisions in this document are **approved for implementation planning**. Any future departure requires a coordinated update to this document before interface code changes. The remaining uncertainties are listed at the end.
+The decisions below describe the current MVP. Any future breaking change should be agreed by the owners of the affected boundary and reflected in this document and generated artifacts.
 
 ### Resolved decisions
 
-1. Keep Flask, SQLAlchemy, SQLite, Pydantic, the current service/provider split, and the existing four API routes.
-2. Search provider data, then upsert returned instruments into the local `instruments` table. Add first checks the table; if absent, it searches the provider by exact symbol, verifies the returned NSE symbol, stores it, then adds it. Thus a stock chosen from search can be added reliably, and valid uncached symbols can also be resolved.
+1. Keep Flask, SQLAlchemy, SQLite, Pydantic, the current service/provider split, and the implemented JSON API routes listed below.
+2. Search provider data, accept only `exchange == "NSE"` and `instrument_type == "EQ"`, and upsert eligible results into the local `instruments` table. Add first checks for an eligible cached symbol; if absent, it searches the provider by exact symbol, verifies the returned eligible NSE equity, stores it, then adds it.
 3. Provider `get_quotes` is a batch interface and service code uses it in batches: one instrument on add, all watchlist instruments in one call on GET. Missing keys mean no quote. A provider exception makes all quote(s) in that call unavailable; saved membership remains unaffected.
 4. Serialize prices as **JSON strings** containing a nonnegative decimal with exactly two fractional digits, e.g. `"3865.25"`. This preserves decimal precision and avoids JavaScript number rounding. Frontend displays the string as supplied. Price is strictly positive for available quotes.
-5. Quote fields are `price`, `currency`, `as_of`, `simulated`. `as_of` is an ISO 8601 UTC string. `simulated` is a required boolean: true for mock data, false for live data. A missing quote is `null`.
+5. Quote fields are `price`, `currency`, `as_of`, `simulated`. `as_of` is an ISO 8601 UTC string. `simulated` describes quote provenance: true for mock/simulated prices, false for live-provider prices. A missing quote is `null`.
 6. All API errors, including Flask 404, 405, and unexpected 500 errors, use the same JSON envelope. Validation messages are stable and concise, not raw Pydantic exception text.
 7. New add returns 201; duplicate add returns 200 and the existing item. Deleting absent membership returns 404. No quote is persisted.
 8. Keep one configured demo user and no authentication/user table in this milestone.
@@ -27,6 +27,9 @@ The decisions in this document are **approved for implementation planning**. Any
 | Pydantic / `schemas.py` | Validate request and response structures at API boundary, with strict extra-field rejection. |
 | Services / `services.py` | Search/upsert instruments, add/list/remove watchlist membership, batch quote requests, convert DB/provider objects to API models. |
 | Provider / `provider.py` | Implement normalized search and quote interface. Mock or future Kite adapter owns provider-specific mapping. |
+| News provider / `news_provider.py` | Return normalized article pages and details; provider-specific mapping stays in the adapter. |
+| LLM provider / `llm_provider.py` | Return structured summary and research drafts; it does not persist or mutate domain state. |
+| News/research service / `news_research_service.py` | Associate, deduplicate, and persist news; orchestrate summaries/research and attach evidence IDs. |
 | SQLAlchemy / `models.py`, `database.py` | Store normalized instruments and watchlist membership. Never store current quote prices. |
 
 ```mermaid
@@ -52,7 +55,7 @@ Request body:
 {"query":"Tata","limit":20}
 ```
 
-`query`: string, trim whitespace, 1–100 characters after trim. `limit`: integer 1–100, defaults to 20. Search matches provider name or symbol (case-insensitive substring for the mock), restricted to NSE equities. Empty results are successful. Search results are upserted into the local instrument cache before responding.
+`query`: string, trim whitespace, 1–100 characters after trim. `limit`: integer 1–100, defaults to 20. Search matching/ranking is provider-defined (the mock uses case-insensitive substring matching on symbol/name). Results are restricted to instruments whose exchange is exactly `NSE` and type exactly `EQ`. Empty results are successful. Eligible results are upserted into the local instrument cache before responding. Startup seeding applies the same filter.
 
 200:
 
@@ -72,7 +75,7 @@ Request:
 {"symbol":"TCS"}
 ```
 
-`symbol`: string, trim and uppercase, 1–32 characters after trim. Resolve exact NSE symbol from local cache. If absent, call provider search using that symbol, then accept only an exact uppercase NSE symbol match; upsert the instrument. If no exact match, return 404. This makes add work even if the browser’s prior search result was not cached or cache was empty.
+`symbol`: string, trim and uppercase, 1–32 characters after trim. Resolve exact eligible NSE equity symbol from local cache. If absent, call provider search using that symbol, then accept only an exact uppercase match with exchange `NSE` and instrument type `EQ`; upsert the instrument. If no exact eligible match, return 404. This makes add work even if the browser’s prior search result was not cached or cache was empty.
 
 201 new / 200 duplicate:
 
@@ -106,7 +109,7 @@ Errors: 400 `VALIDATION_ERROR` for blank/too-long symbol; 404 `WATCHLIST_ITEM_NO
 
 ## 3. Pydantic/API data models
 
-These are the required model-level types and rules for the proposed implementation. All request models reject extras.
+These are the implemented model-level types and rules. All request models reject extras.
 
 | Structure | Exact fields |
 |---|---|
@@ -121,11 +124,11 @@ These are the required model-level types and rules for the proposed implementati
 | Delete response | `symbol: str`; `deleted: Literal[true]`. |
 | Error response | `error: {code: str, message: str, field: str \| null}`. |
 
-Because Pydantic `Decimal` JSON encoding varies from the desired stable string contract, the API schema should use a validated decimal-string type (or explicit serializer) so the wire type is unambiguously JSON string. The frontend must not parse price into JavaScript `Number` for display.
+Prices and monetary amounts are validated and serialized as strings with two fractional digits. The frontend must not parse them into JavaScript `Number` for display.
 
 ## 4. Internal service contracts
 
-Function inputs and outputs below are the proposed stable service boundary. Keep Flask `Session` lifetime owned by route/caller; service functions do not open global sessions.
+Function inputs and outputs below are the current service boundary. Flask route/caller owns the `Session` lifetime; service functions do not open global sessions.
 
 | Function | Input | Output | Failure contract |
 |---|---|---|---|
@@ -134,6 +137,8 @@ Function inputs and outputs below are the proposed stable service boundary. Keep
 | `add(session, provider, user_id: str, symbol: str) -> tuple[WatchlistItem, bool]` | User ID and normalized symbol | Resolve cache or exact provider match, upsert, ensure unique membership, quote one instrument, return item and created flag. | `StockNotFound`; provider unavailable only when provider search is required; DB exception. Quote failure returns null quote, not exception. Handle uniqueness race by re-reading duplicate row and returning `created=False`. |
 | `list_items(session, provider, user_id: str) -> list[WatchlistItem]` | User ID | Load ordered entries, call provider once with all instruments, map quote keys to items; absent map entries / provider failure => null quotes. | DB/unexpected mapping failure propagates. |
 | `remove(session, user_id: str, symbol: str) -> None` | User ID and normalized symbol | Delete matching membership. | `WatchlistItemNotFound`; DB exception. |
+
+Other current module-level service signatures are: `portfolio_service.get_account(session, account_id) -> AccountSummary`; `portfolio_service.get_portfolio(session, provider, account_id) -> PortfolioSummary`; `trading_service.place_order(session, provider, account_id, request) -> tuple[OrderResponse, bool]`, `get_order(session, account_id, order_id) -> OrderResponse`, `list_orders(session, account_id) -> list[OrderResponse]`, and `list_transactions(session, account_id) -> list[Transaction]`; `news_research_service.search_news(session, provider, account_id, request) -> NewsSearchResponse`, `get_article(session, provider, article_id) -> NewsArticle`, `summarize_article(session, news_provider, llm, article_id) -> SummaryResponse`, and `research_stock(session, news_provider, llm, market_provider, request) -> ResearchResponse`. Routes own and close sessions. Services are called directly as functions; there are no service objects or service Protocols.
 
 Use explicit domain exceptions `StockNotFound`, `WatchlistItemNotFound`, `ProviderUnavailable`. Do not leak exception text or stack traces into HTTP responses. Log unexpected exceptions server-side.
 
@@ -148,7 +153,7 @@ class InstrumentData:
     symbol: str
     name: str
     instrument_token: int      # positive integer
-    instrument_type: str       # normalized category, e.g. "EQ"
+    instrument_type: str       # normalized category; only "EQ" is eligible
 
 @dataclass(frozen=True)
 class QuoteData:
@@ -163,7 +168,7 @@ class MarketDataProvider(Protocol):
     ) -> dict[tuple[str, str], QuoteData]: ...  # key is (exchange, symbol)
 ```
 
-One `get_quotes` call must accept any list, including one element, and return zero or more keys from that list. Unknown/missing quote keys are normal. Operational failures raise `ProviderUnavailable` (or are translated to it at adapter boundary). `search_stocks` raises the same typed exception for provider outages. Provider-specific fields and Kite mappings stay inside the adapter. Mock values remain visibly simulated.
+One `get_quotes` call must accept any list, including one element, and return zero or more keys from that list. Unknown/missing quote keys are normal. A quote with `simulated=False` is valid data for watchlist, portfolio, research context, and simulated order pricing. Operational failures raise `ProviderUnavailable` (or are translated to it at adapter boundary). `search_stocks` raises the same typed exception for provider outages. Provider-specific fields and Kite mappings stay inside the adapter. Mock values remain visibly simulated. At startup, when the instrument cache is empty, `create_app` calls `search_stocks("", 100)` to seed it; provider implementations must support this bounded catalog request.
 
 **Usage rule:** `add` calls `get_quotes([selected_instrument])` once. `list_items` calls `get_quotes(all_watchlist_instruments)` once, not once per row. Both map by `(exchange, symbol)`.
 
@@ -200,6 +205,24 @@ Every API failure, including unknown route, unsupported method, bad content type
 | 503 | `PROVIDER_UNAVAILABLE` | Required search operation cannot reach provider. Quote outages are partial success with null quote. |
 | 500 | `INTERNAL_ERROR` | Database or unexpected server failure. |
 
+Other endpoint-specific codes are `ARTICLE_NOT_FOUND` (404), `ORDER_NOT_FOUND` (404), `IDEMPOTENCY_CONFLICT` (409), `ARTICLE_CONTENT_UNAVAILABLE` (422), `NEWS_PROVIDER_UNAVAILABLE` (503), and `LLM_PROVIDER_UNAVAILABLE` (503). Business order rejections (`INSUFFICIENT_CASH`, `INSUFFICIENT_SHARES`, `QUOTE_UNAVAILABLE`) are successful order representations with status `REJECTED`, not HTTP errors. Every live API operation can also return `METHOD_NOT_ALLOWED` (405) for an unsupported method and `INTERNAL_ERROR` (500); unknown API paths return `NOT_FOUND` (404). All use `ErrorResponse`.
+
+| Live operation | Endpoint-specific errors |
+|---|---|
+| `POST /api/stocks/search` | 400 `VALIDATION_ERROR`; 503 `PROVIDER_UNAVAILABLE` |
+| `GET /api/watchlist` | Common errors only |
+| `POST /api/watchlist` | 400 `VALIDATION_ERROR`; 404 `STOCK_NOT_FOUND`; 503 `PROVIDER_UNAVAILABLE` when uncached resolution is needed |
+| `DELETE /api/watchlist/{symbol}` | 400 `VALIDATION_ERROR`; 404 `WATCHLIST_ITEM_NOT_FOUND` |
+| `GET /api/account`, `GET /api/portfolio` | Common errors only |
+| `POST /api/orders` | 400 `VALIDATION_ERROR`; 404 `STOCK_NOT_FOUND`; 409 `IDEMPOTENCY_CONFLICT` |
+| `GET /api/orders` | Common errors only |
+| `GET /api/orders/{order_id}` | 404 `ORDER_NOT_FOUND` |
+| `GET /api/transactions` | Common errors only |
+| `GET /api/news` | 400 `VALIDATION_ERROR`; 503 `NEWS_PROVIDER_UNAVAILABLE` |
+| `GET /api/news/{article_id}` | 404 `ARTICLE_NOT_FOUND` |
+| `POST /api/news/{article_id}/summary` | 404 `ARTICLE_NOT_FOUND`; 422 `ARTICLE_CONTENT_UNAVAILABLE`; 503 `LLM_PROVIDER_UNAVAILABLE` |
+| `POST /api/research/suggestions` | 400 `VALIDATION_ERROR`; 404 `STOCK_NOT_FOUND`; 503 `NEWS_PROVIDER_UNAVAILABLE` or `LLM_PROVIDER_UNAVAILABLE` |
+
 Validation error examples must be deterministic, e.g. `{"error":{"code":"VALIDATION_ERROR","message":"query must not be empty","field":"query"}}`. Do not expose raw Pydantic error dumps.
 
 ## 8. Frontend contract
@@ -212,29 +235,34 @@ Validation error examples must be deterministic, e.g. `{"error":{"code":"VALIDAT
 - For any non-2xx response, parse common error envelope and display `error.message`; malformed/non-JSON network responses get a generic client fallback.
 - Continue safe DOM insertion with `textContent`; no page reload required.
 
-## 9. Current implementation differences to close
+## 9. Implementation status
 
-The current source does **not** yet meet all proposed contracts. Specifically: search calls provider and inserts only returned rows; existing cache rows are not refreshed; add only checks DB and does not provider-resolve an uncached symbol; list makes one provider call per stock; `Quote` uses `Decimal` and does not fix wire JSON type/scale; GET route lacks error wrapping; Flask default 404/405 are not standardized; provider exception type is absent; add’s generic 500 message can falsely say the stock was saved; delete path does not validate max length; SQL uniqueness races can return 500; and provider exceptions during quote are swallowed broadly. These are implementation tasks to bring code into this contract, not behaviors to rely on today.
+The watchlist, account/portfolio read APIs, simulated order and transaction APIs, news feed/article retrieval, cached AI summaries, and stock research suggestions are implemented. Mock market, news, and LLM providers are used by default and can be injected through `create_app`. Production Kite/news/LLM adapters and non-watchlist frontend flows remain unimplemented. OpenAPI and TypeScript declarations cover the live HTTP API. `npm run check` verifies committed generated artifacts and tests without rewriting files. Run `npm run contracts:types` only when intentionally regenerating artifacts after an agreed contract change.
 
-## 10. Parallel ownership
+## 10. Module ownership boundaries
 
-| Developer | Independent ownership | Contract boundary |
+| Area | Primary modules | Boundary |
 |---|---|---|
-| 1 — Frontend | `templates/index.html` | Own browser UI and `fetch` behavior. Keep endpoint paths, JSON keys, status handling, and price-as-string behavior in sections 2 and 8. |
-| 2 — Provider | `provider.py` and future provider adapter module if needed | Own mock/provider implementation. Preserve `InstrumentData`, `QuoteData`, `MarketDataProvider` names, types, and batch semantics in section 5. Do not change API schemas or DB models. |
-| 3 — Backend integration | `app.py`, `services.py`, `schemas.py`, `models.py`, `database.py`, `config.py` | Own routes, validation, service flow, DB access, and error mapping. Preserve the public/provider contracts here; coordinate any breaking change first. |
+| Browser UI | `templates/index.html`, `static/api-types.d.ts` | Calls HTTP endpoints; it does not call providers or access the database. The current page implements watchlist only. |
+| HTTP and validation | `app.py`, `schemas.py` | Routes parse requests, validate with Pydantic, call services, and serialize common errors. |
+| Domain orchestration | `services.py`, `portfolio_service.py`, `trading_service.py`, `news_research_service.py` | Module-level functions receive sessions/providers explicitly and return Pydantic models or raise domain/provider exceptions. |
+| Persistence | `models.py`, `database.py` | SQLAlchemy schema and engine/session setup. |
+| External data adapters | `provider.py`, `news_provider.py`, `llm_provider.py`, mock modules | Implement normalized provider Protocols; provider-specific mapping stays in adapters. |
+| API artifacts | `scripts/export_openapi.py`, `openapi.json`, `static/api-types.d.ts` | Pydantic schemas and route declarations generate OpenAPI; TypeScript types derive from OpenAPI. CI checks freshness without rewriting files. |
 
-**Shared files:** `CONTRACTS.md` is jointly owned; update it before or with any agreed interface change. `requirements.txt` and `README.md` are shared maintenance files. Schema changes touch service code and require Developer 3 coordination. Provider signatures/data structures require Developer 2 coordination. API response/request changes require Developer 1 coordination. The proposed backend set is internally coupled and should remain with one owner rather than be split file-by-file.
+**Shared contracts:** Changes to `schemas.py`, `scripts/export_openapi.py`, `openapi.json`, or `static/api-types.d.ts` affect multiple components and must be coordinated. Changes to provider Protocols require adapter and service-owner coordination. Route/service/database changes are coupled and should be reviewed together. This document is the human-readable contract; generated artifacts are the machine-checkable HTTP boundary.
 
 ## 11. Remaining uncertainties
 
-These do not block implementation of the above contract; defer unless product requirements change:
+These remain outside the current MVP contract:
 
 1. Search ranking and tie-breaking beyond provider order. The mock keeps catalog order; no ranking guarantee is needed for MVP.
 2. Instrument cache refresh cadence. Current milestone seeds an empty cache and upserts search/add results; periodic refresh is out of scope.
 3. Quote timeout/retry policy and provider rate limits. For now adapter must use bounded timeouts; exact values can be chosen in provider implementation and documented there.
 4. Whether public clients ultimately need `instrument_token`. Keep it for compatibility in this milestone; revisiting is a versioned API decision.
 5. Any future authentication/multiple users or live Kite credentials. Both are explicitly outside this milestone.
+
+**Resolved trading decision:** Any available quote, including `simulated=False`, may supply the execution price. Execution always updates TradePoint's internal paper account; the application never submits a broker order. The quote's `simulated` flag describes quote provenance, not whether the account transaction is simulated.
 
 ## 12. Account and portfolio read APIs (implemented)
 
@@ -262,7 +290,7 @@ Each holding contains `symbol`, `name`, `quantity` (positive whole-share count s
 
 Both endpoints use the standard `ErrorResponse` with HTTP 500 for database or unexpected errors. Quote-provider unavailability is treated as missing quote data, not as a failed portfolio request. Initial cash is read from `TRADEPOINT_INITIAL_CASH` (default `1000000.00`) only when creating the persisted demo account; it does not overwrite an existing account. Holdings link to the account and the existing `instruments` rows.
 
-## 14. News and AI research APIs (implemented with mock providers)
+## 13. News and AI research APIs (implemented with mock providers)
 
 ### `GET /api/news`
 
@@ -288,7 +316,7 @@ Request `{"symbol":"TCS"}`. Returns `{"suggestions":[{"symbol":"TCS","thesis":".
 
 `NewsProvider.search_articles(query, symbols, page_token, page_size) -> NewsPage` returns normalized provider articles and an opaque next token. `get_article(source, provider_article_id) -> ArticleData | None` retrieves details. `LLMProvider.summarize_article(ArticleInput) -> SummaryDraft` and `research_stock(symbol, current_price, evidence) -> ResearchDraft` return structured content; the backend adds internal evidence IDs, persistence, disclaimers, and API models. Provider-specific payloads remain inside adapter implementations. `NewsProviderUnavailable` and `LLMProviderUnavailable` are translated to the public error codes above.
 
-## 13. Simulated order and transaction APIs (implemented)
+## 14. Simulated order and transaction APIs (implemented)
 
 All order requests are immediate `MARKET` orders for the configured demo account. Request `quantity` is a JSON integer from 1 through 100000. `symbol` is trimmed and uppercased. The required `idempotency_key` is a trimmed string of 1–128 characters.
 
@@ -306,7 +334,7 @@ New order response uses HTTP 201, including business rejection:
 {"order_id":"uuid","symbol":"TCS","side":"BUY","quantity":2,"order_type":"MARKET","status":"FILLED","execution_price":"3865.25","rejection_reason":null,"currency":"INR","created_at":"2026-11-08T10:00:00Z"}
 ```
 
-For business rejections, status is `REJECTED`, `execution_price` is null, and `rejection_reason` is one of `INSUFFICIENT_CASH`, `INSUFFICIENT_SHARES`, or `QUOTE_UNAVAILABLE`. Such an order is persisted, but creates no transaction, cash delta, or holding mutation. Unknown instrument is a 404 error rather than an order. A repeated key with the same canonical request returns the original body with HTTP 200; reuse with a different request returns HTTP 409 `IDEMPOTENCY_CONFLICT`.
+For business rejections, status is `REJECTED`, `execution_price` is null, and `rejection_reason` is one of `INSUFFICIENT_CASH`, `INSUFFICIENT_SHARES`, or `QUOTE_UNAVAILABLE`. Such an order is persisted, but creates no transaction, cash delta, or holding mutation. Unknown instrument is a 404 error rather than an order. A repeated key with the same canonical request returns the original body with HTTP 200; reuse with a different request returns HTTP 409 `IDEMPOTENCY_CONFLICT`. Any available quote may set the paper execution price, whether its provider marks it simulated or live; no real broker execution occurs and resulting orders/transactions remain TradePoint paper records.
 
 ### `GET /api/orders` and `GET /api/orders/{order_id}`
 

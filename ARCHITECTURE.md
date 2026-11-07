@@ -122,15 +122,15 @@ The source brief was truncated after “Trading will initially use simulated”.
 
 `schemas.py` is the shared source for Pydantic API structures. `scripts/export_openapi.py` emits `openapi.json` for implemented watchlist, account, portfolio, trading, news, summarization, and research routes.
 
-`npm run contracts:types` regenerates `static/api-types.d.ts` from OpenAPI using `openapi-typescript`. Do not hand-edit generated files. `npm run check` regenerates OpenAPI and frontend types and runs Python contract tests. CI runs this command on pushes and pull requests. The current vanilla JavaScript is checked against its endpoint names and field references by a contract test; it is not statically type-checked as TypeScript.
+`npm run contracts:types` regenerates `openapi.json` and `static/api-types.d.ts` intentionally. Do not hand-edit generated files. `npm run check` compares committed generated artifacts with fresh output without writing them, then runs Python contract tests. CI runs this command on pushes and pull requests, so stale artifacts fail the check. The current vanilla JavaScript is checked against its endpoint names and field references by a contract test; it is not statically type-checked as TypeScript.
 
-Normalized integration seams are `MarketDataProvider` in `provider.py`, `NewsProvider` in `news_provider.py`, `LLMProvider` in `llm_provider.py`, and service Protocols in `service_contracts.py`. Deterministic mock news/LLM providers and backend orchestration are implemented; production external adapters and UI remain out of scope.
+Normalized integration seams are `MarketDataProvider` in `provider.py`, `NewsProvider` in `news_provider.py`, and `LLMProvider` in `llm_provider.py`. Application services are explicit module-level functions (`services.py`, `portfolio_service.py`, `trading_service.py`, and `news_research_service.py`), called directly by Flask routes with dependencies passed as arguments. Deterministic mock news/LLM providers and backend orchestration are implemented; production external adapters and UI remain out of scope.
 
 ## 8. Remaining decisions
 
 1. Obtain and review the omitted remainder of the product brief after “Trading will initially use simulated” before starting any trading implementation.
 2. Confirm the starting cash amount and development reset mechanism; this plan assumes INR 1,000,000.00 and no API for funding.
-3. Confirm whether simulated execution should use deterministic fixtures or the current mock quote, and define acceptable quote age once there is more than one provider.
+3. The current simulated execution accepts any available quote, including live-provider quotes, while keeping all orders and transactions in TradePoint's paper ledger. Define acceptable quote age once there is more than one provider.
 4. Select news source(s), licensing/retention rules, and article text availability before implementing NewsProvider.
 5. Select LLM provider/model, privacy/retention policy, token budget and safety constraints before implementing LLMProvider.
 6. Define the required human review/disclaimer behavior and allowed scope of AI suggestions before exposing research endpoints.
@@ -179,7 +179,7 @@ The watchlist API and UI remain implemented. Account/portfolio and simulated tra
 
 ### Developer 1 — Backend and architecture
 
-> Implement the next assigned backend vertical slice in the existing Flask/SQLAlchemy/Pydantic modular monolith. Read `CONTRACTS.md`, `ARCHITECTURE.md`, `openapi.json`, and shared schemas first. Do not change watchlist wire behavior. Add or update Pydantic models, service Protocols, service implementation, route handling, persistence constraints/migration plan, and contract/integration tests for your assigned feature. Keep money as `Decimal` internally and fixed two-decimal strings on the wire; use the common `ErrorResponse`. Do not implement unrelated domains. Run `npm run check`. If the contract is insufficient, propose a contract change before coding against a different shape.
+> Implement the next assigned backend vertical slice in the existing Flask/SQLAlchemy/Pydantic modular monolith. Read `CONTRACTS.md`, `ARCHITECTURE.md`, `openapi.json`, and shared schemas first. Do not change watchlist wire behavior. Add or update Pydantic models, direct service functions with explicit dependencies, route handling, persistence constraints/migration plan, and contract/integration tests for your assigned feature. Keep money as `Decimal` internally and fixed two-decimal strings on the wire; use the common `ErrorResponse`. Do not implement unrelated domains. Run `npm run check`. If the contract is insufficient, propose a contract change before coding against a different shape.
 
 ### Developer 2 — Frontend
 
@@ -191,4 +191,4 @@ The watchlist API and UI remain implemented. Account/portfolio and simulated tra
 
 ### Merge gate
 
-The shared branch requires `npm run check` to pass. Changes to `schemas.py`, provider/service Protocols, OpenAPI generation, generated types, database schema, `CONTRACTS.md`, or this architecture plan require central integrator review. Generated `openapi.json` and `static/api-types.d.ts` must be regenerated in the same change as schema edits. Never hand-edit generated artifacts.
+The shared branch requires `npm run check` to pass. Changes to `schemas.py`, provider Protocols, OpenAPI generation, generated types, database schema, `CONTRACTS.md`, or this architecture plan require central integrator review. Generated `openapi.json` and `static/api-types.d.ts` must be regenerated in the same change as schema edits. Never hand-edit generated artifacts.

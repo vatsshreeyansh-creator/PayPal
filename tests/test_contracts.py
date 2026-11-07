@@ -17,10 +17,12 @@ from llm_provider import LLMProvider, LLMProviderUnavailable
 from schemas import Quote, OrderRequest, OrderResponse, Transaction, ErrorResponse
 from config import DEMO_USER_ID, INITIAL_CASH
 from database import SessionLocal
-from models import Account, ArticleRecord, ArticleSummaryRecord, CashLedgerEntry, Holding, Instrument, Order, TransactionRecord
+from models import Account, ArticleRecord, ArticleSummaryRecord, Base, CashLedgerEntry, Holding, Instrument, Order, TransactionRecord
+from services import seed_instruments
 from mock_research_providers import MockNewsProvider, MockLLMProvider
 from news_provider import NewsPage
-from sqlalchemy import select
+from sqlalchemy import select, create_engine
+from sqlalchemy.orm import Session
 from decimal import Decimal
 
 
@@ -52,6 +54,36 @@ class ContractTests(unittest.TestCase):
         quotes = provider.get_quotes(stocks)
         self.assertEqual(set(quotes), {(x.exchange, x.symbol) for x in stocks})
         self.assertTrue(all(isinstance(q, QuoteData) and q.simulated for q in quotes.values()))
+
+    def test_only_nse_equities_are_searchable_addable_and_seeded(self):
+        candidates = [
+            InstrumentData("NSE", "AUDITIDX", "Audit Index", 9001, "INDICES"),
+            InstrumentData("BSE", "AUDITBSE", "Audit BSE Equity", 9002, "EQ"),
+            InstrumentData("NSE", "AUDITGOOD", "Audit NSE Equity", 9003, "EQ"),
+        ]
+
+        class MixedInstrumentProvider(MockMarketDataProvider):
+            def search_stocks(self, query, limit=20):
+                return candidates[:limit]
+
+        provider = MixedInstrumentProvider()
+        client = create_app(provider).test_client()
+        response = client.post("/api/stocks/search", json={"query": "Audit"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([row["symbol"] for row in response.get_json()["results"]], ["AUDITGOOD"])
+        rejected = client.post("/api/watchlist", json={"symbol": "AUDITIDX"})
+        self.assertEqual(rejected.status_code, 404)
+        self.assertEqual(rejected.get_json()["error"]["code"], "STOCK_NOT_FOUND")
+        with SessionLocal() as session:
+            self.assertIsNone(session.scalar(select(Instrument).where(Instrument.symbol == "AUDITIDX")))
+            self.assertIsNone(session.scalar(select(Instrument).where(Instrument.symbol == "AUDITBSE")))
+
+        engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(engine)
+        with Session(engine) as session:
+            seed_instruments(session, provider)
+            self.assertEqual([row.symbol for row in session.scalars(select(Instrument)).all()], ["AUDITGOOD"])
+        engine.dispose()
 
     def test_news_and_llm_provider_protocols_are_implementable(self):
         self.assertIsInstance(MockNewsProvider(), NewsProvider)
@@ -194,6 +226,27 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(len(self.client.get("/api/transactions").get_json()), 4)
         self.assertEqual(len(self.client.get("/api/orders").get_json()), 4)
 
+    def test_simulated_order_can_use_live_market_quote_without_broker_execution(self):
+        self.reset_trading_state()
+
+        class LiveQuoteProvider(MockMarketDataProvider):
+            def get_quotes(self, instruments):
+                now = datetime.now(timezone.utc)
+                return {(item.exchange, item.symbol): QuoteData(Decimal("123.45"), now, False)
+                        for item in instruments}
+
+        client = create_app(LiveQuoteProvider()).test_client()
+        response = client.post("/api/orders", json={"symbol": "TCS", "side": "BUY", "quantity": 2,
+            "order_type": "MARKET", "idempotency_key": "live-quote-paper-order"})
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.get_json()["status"], "FILLED")
+        self.assertEqual(response.get_json()["execution_price"], "123.45")
+        transactions = client.get("/api/transactions").get_json()
+        self.assertEqual(len(transactions), 1)
+        self.assertEqual(transactions[0]["price"], "123.45")
+        self.assertEqual(client.get("/api/account").get_json()["cash_balance"],
+                         f"{INITIAL_CASH - Decimal('246.90'):.2f}")
+
     def test_idempotency_replay_and_conflict_do_not_double_apply(self):
         self.reset_trading_state()
         first = self.submit("BUY", 2, "same-key")
@@ -306,8 +359,15 @@ class ContractTests(unittest.TestCase):
         self.assertIn("OrderRequest", spec["components"]["schemas"])
         quote = spec["components"]["schemas"]["Quote"]
         self.assertEqual(quote["properties"]["price"]["type"], "string")
+        for operations in spec["paths"].values():
+            for operation in operations.values():
+                if "responses" in operation:
+                    self.assertIn("405", operation["responses"])
+                    self.assertIn("500", operation["responses"])
+        self.assertIn("503", spec["paths"]["/api/watchlist"]["post"]["responses"])
+        self.assertIn("422", spec["paths"]["/api/news/{article_id}/summary"]["post"]["responses"])
         for path in ("/api/news", "/api/news/{article_id}", "/api/news/{article_id}/summary", "/api/research/suggestions"):
-            self.assertTrue(any(op.get("x-implementation-status") != "planned" for op in spec["paths"][path].values()))
+            self.assertTrue(spec["paths"][path])
 
     def reset_news_state(self):
         with SessionLocal() as session:

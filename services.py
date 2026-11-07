@@ -16,6 +16,11 @@ class WatchlistItemNotFound(Exception):
     pass
 
 
+def _is_nse_equity(data: InstrumentData) -> bool:
+    """Only NSE equity shares are eligible for stock search and watchlists."""
+    return data.exchange == "NSE" and data.instrument_type == "EQ"
+
+
 def stock_schema(stock: Instrument) -> StockSummary:
     return StockSummary(symbol=stock.symbol, name=stock.name, exchange=stock.exchange,
                         instrument_token=stock.instrument_token)
@@ -38,14 +43,14 @@ def seed_instruments(session: Session, provider: MarketDataProvider) -> None:
     if session.scalar(select(Instrument.id).limit(1)) is not None:
         return
     for data in provider.search_stocks("", 100):
-        if data.exchange == "NSE":
+        if _is_nse_equity(data):
             _upsert(session, data)
     session.commit()
 
 
 def search(session: Session, provider: MarketDataProvider, query: str, limit: int) -> list[StockSummary]:
     matches = provider.search_stocks(query, limit)
-    rows = [_upsert(session, data) for data in matches if data.exchange == "NSE"]
+    rows = [_upsert(session, data) for data in matches if _is_nse_equity(data)]
     session.commit()
     return [stock_schema(row) for row in rows]
 
@@ -71,13 +76,15 @@ def _quote_map(provider: MarketDataProvider, instruments: list[InstrumentData]):
 
 
 def add(session: Session, provider: MarketDataProvider, user_id: str, symbol: str) -> tuple[WatchlistItem, bool]:
-    stock = session.scalar(select(Instrument).where(Instrument.exchange == "NSE", Instrument.symbol == symbol))
+    stock = session.scalar(select(Instrument).where(Instrument.exchange == "NSE",
+                                                    Instrument.instrument_type == "EQ",
+                                                    Instrument.symbol == symbol))
     if stock is None:
         try:
             matches = provider.search_stocks(symbol, 100)
         except ProviderUnavailable:
             raise
-        data = next((m for m in matches if m.exchange == "NSE" and m.symbol.upper() == symbol), None)
+        data = next((m for m in matches if _is_nse_equity(m) and m.symbol.upper() == symbol), None)
         if data is None:
             raise StockNotFound
         stock = _upsert(session, data)
