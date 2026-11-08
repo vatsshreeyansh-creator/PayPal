@@ -4,14 +4,21 @@ A Flask + SQLAlchemy + SQLite demo with a Jinja/Bootstrap/vanilla-JavaScript fro
 
 ## Run locally
 
+### 1. Start the Flask Backend
 ```powershell
 py -m venv .venv
 .venv\Scripts\Activate.ps1
 py -m pip install -r requirements.txt
 py app.py
 ```
-
 Open <http://127.0.0.1:5000>. The SQLite database is created as `tradepoint.db` beside `app.py`.
+
+### 2. Run the Modern React + Vite Frontend
+```powershell
+npm run frontend:dev
+```
+Open <http://localhost:5173>. It proxies all `/api/*` calls automatically to the Flask backend running on port 5000.
+
 
 Configuration: `TRADEPOINT_DATABASE_URL`, `TRADEPOINT_DEMO_USER_ID`, `TRADEPOINT_INITIAL_CASH` (default `1000000.00` INR), and `TRADEPOINT_SECRET_KEY` are optional environment variables. The initial cash value is used only when the account row is first created; changing the environment variable does not reset an existing account. One demo user is used; there is no authentication.
 
