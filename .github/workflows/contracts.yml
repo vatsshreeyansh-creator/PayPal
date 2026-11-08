@@ -16,6 +16,14 @@ jobs:
         with:
           node-version: "22"
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
       - run: python -m pip install -r requirements.txt
       - run: npm ci
+      - run: npm ci --prefix frontend
+      - run: npm run frontend:build
       - run: npm run check
+      - run: npm run frontend:test
+      - run: npm run frontend:lint
+      - run: python scripts/check_frontend_runtime.py

@@ -5,27 +5,13 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatINR(val: string | number | null | undefined): string {
+export function formatINR(val: string | null | undefined): string {
   if (val === null || val === undefined || val === '') return '—';
-  const num = typeof val === 'string' ? parseFloat(val) : val;
-  if (isNaN(num)) return '—';
-
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-  }).format(num);
-}
-
-export function formatNumber(val: string | number | null | undefined): string {
-  if (val === null || val === undefined || val === '') return '—';
-  const num = typeof val === 'string' ? parseFloat(val) : val;
-  if (isNaN(num)) return '—';
-
-  return new Intl.NumberFormat('en-IN', {
-    maximumFractionDigits: 2,
-  }).format(num);
+  const match = /^(-?)(\d+)\.(\d{2})$/.exec(val);
+  if (!match) return val;
+  const [, sign, integer, fraction] = match;
+  const formattedInteger = BigInt(integer).toLocaleString('en-IN');
+  return `₹${sign}${formattedInteger}.${fraction}`;
 }
 
 export function formatDateTime(isoString: string | null | undefined): string {

@@ -1,6 +1,9 @@
 """TradePoint Watchlist Flask API entry point."""
+import os
+from pathlib import Path
 from typing import Any
-from flask import Flask, jsonify, render_template, request
+
+from flask import Flask, abort, jsonify, render_template, request, send_from_directory
 from pydantic import ValidationError
 from werkzeug.exceptions import BadRequest, HTTPException
 from config import DEMO_USER_ID, INITIAL_CASH, SECRET_KEY
@@ -31,9 +34,23 @@ from news_research_service import (ArticleContentUnavailable, ArticleNotFound, N
 
 def create_app(provider: MarketDataProvider | None = None,
                news_provider: NewsProvider | None = None,
-               llm_provider: LLMProvider | None = None):
+               llm_provider: LLMProvider | None = None,
+               serve_react: bool | None = None):
     app = Flask(__name__)
     app.config["SECRET_KEY"] = SECRET_KEY
+    if serve_react is None:
+        react_setting = os.getenv("TRADEPOINT_SERVE_REACT", "false").strip().lower()
+        if react_setting not in {"true", "false", "1", "0", "yes", "no"}:
+            raise ValueError("TRADEPOINT_SERVE_REACT must be a boolean value")
+        serve_react = react_setting in {"true", "1", "yes"}
+
+    frontend_dist = Path(__file__).resolve().parent / "frontend" / "dist"
+    frontend_index = frontend_dist / "index.html"
+    if serve_react and not frontend_index.is_file():
+        raise RuntimeError(
+            "React production files are missing. Run `npm run frontend:build` before starting Flask."
+        )
+    app.config["SERVE_REACT"] = serve_react
     market_data = provider or get_default_market_provider()
     news_data = news_provider or get_default_news_provider()
     llm_data = llm_provider or get_default_llm_provider()
@@ -72,7 +89,26 @@ def create_app(provider: MarketDataProvider | None = None,
 
     @app.get("/")
     def index():
+        if app.config["SERVE_REACT"]:
+            return send_from_directory(frontend_dist, "index.html")
         return render_template("index.html")
+
+    @app.get("/legacy")
+    def legacy_index():
+        return render_template("index.html")
+
+    if serve_react:
+        @app.get("/assets/<path:filename>")
+        def react_assets(filename):
+            return send_from_directory(frontend_dist / "assets", filename)
+
+        @app.get("/<path:filename>")
+        def react_public_asset(filename):
+            # Only built files are served here. Unknown paths still reach the
+            # common 404 handler, so unknown /api paths stay JSON errors.
+            if (frontend_dist / filename).is_file():
+                return send_from_directory(frontend_dist, filename)
+            abort(404)
 
     @app.post("/api/stocks/search")
     def search_stocks():

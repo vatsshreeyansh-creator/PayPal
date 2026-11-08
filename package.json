@@ -6,7 +6,9 @@
     "contracts:check-generated": "py scripts/check_openapi.py && npx openapi-typescript openapi.json --check -o static/api-types.d.ts",
     "check": "npm run contracts:check-generated && py -m unittest discover -s tests -v",
     "frontend:dev": "npm run dev --prefix frontend",
-    "frontend:build": "npm run build --prefix frontend"
+    "frontend:build": "npm run build --prefix frontend",
+    "frontend:test": "npm run test --prefix frontend",
+    "frontend:lint": "npm run lint --prefix frontend"
   },
   "devDependencies": {
     "openapi-typescript": "^7.6.1"

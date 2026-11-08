@@ -1,12 +1,10 @@
 # TradePoint — Architecture and Parallel Development Plan
 
-**Status:** Preparation proposal based on the repository inspected on 7 November 2026. This document does not implement future features. The existing watchlist MVP remains the working baseline. `CONTRACTS.md` remains authoritative for the watchlist/provider APIs until an explicitly reviewed contract amendment is made.
-
-> **Scope input is incomplete:** The supplied product request ends at “Trading will initially use simulated”. This plan covers only the complete feature list received: account/portfolio, watchlist, and simulated buying/selling/order history. Any further text after that cutoff may add constraints; review it before treating this plan as final for trading behavior.
+**Status:** Current architecture guidance. Flask remains the API/backend server; React/Vite is the primary frontend. `CONTRACTS.md` and the generated OpenAPI declarations define the live HTTP API.
 
 ## 1. What exists now
 
-The repository is a compact Flask modular application, not a package-based application:
+The repository is a compact Flask modular backend with a React/Vite frontend:
 
 | Existing file | Current role |
 |---|---|
@@ -21,11 +19,12 @@ The repository is a compact Flask modular application, not a package-based appli
 | `models.py` | SQLAlchemy instrument, watchlist, account, holdings, order, transaction, and cash-ledger tables. |
 | `database.py` | Shared engine/session and SQLite foreign-key setup. |
 | `config.py` | Database URL, demo user ID, secret key. |
-| `templates/index.html` | One-page Bootstrap/vanilla JS watchlist interface. |
-| `CONTRACTS.md` | Approved watchlist contracts and ownership proposal. |
+| `frontend/src/` | Primary React/TypeScript user interface. Vite serves it in development and builds it to `frontend/dist/` for Flask production serving. |
+| `templates/index.html`, `static/app.js`, `static/styles.css` | Legacy Jinja watchlist interface retained at `/legacy` and at `/` when React serving is disabled. |
+| `CONTRACTS.md` | Current API and component contracts. |
 | `README.md`, `requirements.txt` | Run and dependency instructions. |
 
-The implementation is a single-user demo with persistent SQLite storage and simulated quotes. Account and holdings persistence plus account/portfolio read APIs are implemented. Holdings are currently seeded only by controlled setup/tests until trading exists. There are still no order, trade, or transaction-history tables or endpoints. Do not treat trading or execution as implemented.
+The implementation is a single-user demo with persistent SQLite storage and mock market/news/LLM providers. Account, holdings, watchlist, paper trading, orders, transactions, news, summaries, and research APIs are implemented. Production external providers, authentication, and historical market-price APIs are not implemented.
 
 ## 2. Recommended architecture: keep the modular monolith
 
@@ -33,7 +32,9 @@ Keep one Flask process, one SQLAlchemy database, one Pydantic API boundary, and 
 
 ```mermaid
 flowchart TB
-  UI[Browser: Jinja + vanilla JS] --> API[Flask HTTP routes]
+  UI[Browser: React + TypeScript] -->|JSON /api requests| API[Flask HTTP routes]
+  Vite[Vite dev server] -->|proxies /api in development| API
+  API -->|serves frontend/dist in production| UI
   API --> SCH[Pydantic request/response schemas]
   API --> SVC[Application services]
   SVC --> ACC[Account and portfolio service]
@@ -47,7 +48,7 @@ flowchart TB
   MDP --> MOCK[Mock provider]
 ```
 
-Routes should parse/validate, call a service, and map domain errors to HTTP. Services own business rules and transaction boundaries. SQLAlchemy models persist state. Provider adapters own external market-data translations; they must return normalized application types. Browser JavaScript owns display and interaction only.
+Routes should parse/validate, call a service, and map domain errors to HTTP. Services own business rules and transaction boundaries. SQLAlchemy models persist state. Provider adapters own external market-data translations; they must return normalized application types. React owns display and interaction only. It calls Flask through relative `/api/...` URLs and never accesses the database or provider interfaces directly.
 
 ## 3. Proposed future domain boundaries
 
@@ -122,9 +123,9 @@ The source brief was truncated after “Trading will initially use simulated”.
 
 `schemas.py` is the shared source for Pydantic API structures. `scripts/export_openapi.py` emits `openapi.json` for implemented watchlist, account, portfolio, trading, news, summarization, and research routes.
 
-`npm run contracts:types` regenerates `openapi.json` and `static/api-types.d.ts` intentionally. Do not hand-edit generated files. `npm run check` compares committed generated artifacts with fresh output without writing them, then runs Python contract tests. CI runs this command on pushes and pull requests, so stale artifacts fail the check. The current vanilla JavaScript is checked against its endpoint names and field references by a contract test; it is not statically type-checked as TypeScript.
+`npm run contracts:types` regenerates `openapi.json` and `static/api-types.d.ts` intentionally. Do not hand-edit generated files. `npm run check` compares committed generated artifacts with fresh output without writing them, then runs Python contract tests. CI also installs the frontend lockfile, builds React, runs frontend API fixture tests and lint, and smoke-tests Flask serving the production assets. React API types are imported from the generated OpenAPI declaration; the runtime API client validates response shapes before returning them.
 
-Normalized integration seams are `MarketDataProvider` in `provider.py`, `NewsProvider` in `news_provider.py`, and `LLMProvider` in `llm_provider.py`. Application services are explicit module-level functions (`services.py`, `portfolio_service.py`, `trading_service.py`, and `news_research_service.py`), called directly by Flask routes with dependencies passed as arguments. Deterministic mock news/LLM providers and backend orchestration are implemented; production external adapters and UI remain out of scope.
+Normalized integration seams are `MarketDataProvider` in `provider.py`, `NewsProvider` in `news_provider.py`, and `LLMProvider` in `llm_provider.py`. Application services are explicit module-level functions (`services.py`, `portfolio_service.py`, `trading_service.py`, and `news_research_service.py`), called directly by Flask routes with dependencies passed as arguments. Deterministic mock providers and backend orchestration are implemented. React is the primary frontend; production external provider adapters remain out of scope.
 
 ## 8. Remaining decisions
 
@@ -153,7 +154,7 @@ This split preserves independent work while keeping integration surfaces explici
 
 | Developer | Primary ownership | Must coordinate on |
 |---|---|---|
-| A — Frontend | `templates/index.html`; future static/template files owned by UI. | `CONTRACTS.md` API shapes, enum/status labels, error messages, quote display. No direct DB/provider imports. |
+| A — Frontend | `frontend/src/`, `frontend/package.json`; `templates/` and `static/` only for explicitly assigned legacy work. | `CONTRACTS.md`/OpenAPI response shapes, enum/status labels, errors, and money formatting. No direct DB/provider imports. |
 | B — Market data | `provider.py`; future `providers/` adapter modules if a real adapter is authorized. | `InstrumentData`, `QuoteData`, `MarketDataProvider`, `ProviderUnavailable`. Do not alter HTTP shapes or DB models independently. |
 | C — Backend/domain integration | `app.py`, `services.py`, `schemas.py`, `models.py`, `database.py`, `config.py`; future account/trading/portfolio services and route modules. | All shared schemas and database migrations. Owns transaction integration and must align with provider owner’s normalized types. |
 
@@ -171,11 +172,18 @@ Avoid assigning different owners to `app.py`, `schemas.py`, and `models.py` in t
 - Use deterministic mock fixtures in tests and keep provider-specific response mapping inside the adapter.
 - Keep this document and `CONTRACTS.md` aligned; if they conflict on current watchlist APIs, `CONTRACTS.md` is authoritative until amended.
 
-## 12. Current implementation status
+## 12. Frontend runtime and verification
 
-The watchlist, account/portfolio, simulated trading, news/article, mock summary, and research APIs are implemented. The frontend shell now wires available APIs across these sections; historical charting and standalone market quote views remain placeholders. Production Kite/news/LLM integrations are not implemented.
+- **Development:** start Flask with `py app.py` on port 5000, then run `npm run frontend:dev`; Vite serves React on port 5173 and proxies `/api/*` to Flask. The Vite config owns this development proxy.
+- **Production:** run `npm run frontend:build` to create `frontend/dist/`, set `TRADEPOINT_SERVE_REACT=true`, then run `waitress-serve --call --listen=0.0.0.0:5000 app:create_app`. Flask serves the build at `/` and static files from the same build directory. Startup fails if the build is absent. The legacy Jinja page remains available at `/legacy` and at `/` when React serving is disabled.
+- **API traffic:** the React client always calls relative `/api/...` routes. Vite forwards them during development; in production the browser calls Flask directly on the same origin.
+- **Merge verification:** after installing root and frontend npm lockfiles plus Python requirements, run `npm run frontend:build`, `npm run check`, `npm run frontend:test`, `npm run frontend:lint`, and `py scripts/check_frontend_runtime.py`. GitHub Actions runs all five checks.
 
-## 13. Ready-to-use developer task briefs
+## 13. Current implementation status
+
+The watchlist, account/portfolio, simulated trading, news/article, mock summary, and research APIs are implemented. The React frontend consumes those APIs; historical charting and standalone market quote views remain placeholders. Flask serves the React production build when `TRADEPOINT_SERVE_REACT=true`; the Vite development server proxies API calls to Flask. Production Kite/news/LLM integrations are not implemented.
+
+## 14. Ready-to-use developer task briefs
 
 ### Developer 1 — Backend and architecture
 
@@ -183,7 +191,7 @@ The watchlist, account/portfolio, simulated trading, news/article, mock summary,
 
 ### Developer 2 — Frontend
 
-> Implement the assigned UI slice using the existing Jinja/Bootstrap/vanilla-JS stack. Read the OpenAPI-generated `static/api-types.d.ts` and the corresponding schemas in `schemas.py`; do not invent payload fields or turn money strings into JS numbers. Use only Flask API calls, render provider/AI text safely, and handle the shared error envelope. Preserve existing watchlist interactions. Add/update browser-facing contract checks or typed request helpers when your slice requires them. Do not call market-data, news, or LLM providers directly. Run `npm run check` and report API assumptions.
+> Implement the assigned UI slice in the existing React/TypeScript/Vite app under `frontend/src/`. Use types from `static/api-types.d.ts` and the corresponding schemas in `schemas.py`; do not invent payload fields or convert monetary strings to floating-point values. Use only relative Flask `/api` calls, render provider/AI text safely, and handle the shared error envelope. Preserve existing watchlist interactions. Add/update API fixture tests when needed. Do not call market-data, news, or LLM providers directly. Run `npm run frontend:build`, `npm run frontend:test`, and `npm run frontend:lint`, then report API assumptions.
 
 ### Developer 3 — External integrations
 
@@ -191,4 +199,4 @@ The watchlist, account/portfolio, simulated trading, news/article, mock summary,
 
 ### Merge gate
 
-The shared branch requires `npm run check` to pass. Changes to `schemas.py`, provider Protocols, OpenAPI generation, generated types, database schema, `CONTRACTS.md`, or this architecture plan require central integrator review. Generated `openapi.json` and `static/api-types.d.ts` must be regenerated in the same change as schema edits. Never hand-edit generated artifacts.
+The shared branch requires the full workflow in section 12 to pass. Changes to `schemas.py`, provider Protocols, OpenAPI generation, generated types, database schema, `CONTRACTS.md`, or this architecture plan require central integrator review. Generated `openapi.json` and `static/api-types.d.ts` must be regenerated in the same change as schema edits. Never hand-edit generated artifacts.

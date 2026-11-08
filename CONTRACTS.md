@@ -227,7 +227,7 @@ Validation error examples must be deterministic, e.g. `{"error":{"code":"VALIDAT
 
 ## 8. Frontend contract
 
-- The current Jinja/vanilla-JavaScript shell reads and sends only fields in `openapi.json`; `static/api-types.d.ts` is generated for editor/reference use. No TypeScript build is used.
+- The primary frontend is React/TypeScript under `frontend/src/`, built and served by Vite during development and by Flask in production. Public API types are imported from the generated `static/api-types.d.ts`; the API client validates decoded JSON before returning typed data.
 - Search sends `POST /api/stocks/search` `{query: string, limit: 20}`; reads `results[]` and uses `name`, `symbol`.
 - Selecting a result sends `POST /api/watchlist` `{symbol: string}`; treats both 200 and 201 as success; reads `item` if needed and refreshes via GET.
 - Initial load and refresh send `GET /api/watchlist`; reads `items[]`, each containing `stock` and nullable `quote`.
@@ -236,17 +236,25 @@ Validation error examples must be deterministic, e.g. `{"error":{"code":"VALIDAT
 - For any non-2xx response, parse common error envelope and display `error.message`; malformed/non-JSON network responses get a generic client fallback.
 - Continue safe DOM insertion with `textContent`; no page reload required.
 
-The shell also consumes `GET /api/account`, `GET /api/portfolio`, `POST /api/orders`, `GET /api/orders`, `GET /api/transactions`, `GET /api/news`, `GET /api/news/{article_id}`, `POST /api/news/{article_id}/summary`, and `POST /api/research/suggestions`. Daily P&L, portfolio performance history, standalone market quotes/history, and other unsupported data are explicit placeholders because no corresponding API fields or routes exist.
+The React app also consumes `GET /api/account`, `GET /api/portfolio`, `POST /api/orders`, `GET /api/orders`, `GET /api/transactions`, `GET /api/news`, `GET /api/news/{article_id}`, `POST /api/news/{article_id}/summary`, and `POST /api/research/suggestions`. It uses the exact response fields and nullable behavior specified in this document and `openapi.json`. Daily P&L, portfolio performance history, standalone market quotes/history, and other unsupported data are explicit placeholders because no corresponding API fields or routes exist.
+
+### Frontend runtime
+
+- **Development:** run Flask (`py app.py`, port 5000) and Vite (`npm run frontend:dev`, port 5173) in separate terminals. Vite proxies `/api/*` to `http://127.0.0.1:5000`; the React client uses relative `/api/...` paths.
+- **Production build:** `npm run frontend:build` creates `frontend/dist/index.html` and `frontend/dist/assets/*`.
+- **Production server:** set `TRADEPOINT_SERVE_REACT=true` and start the WSGI app with `waitress-serve --call --listen=0.0.0.0:5000 app:create_app`. Flask serves the built React entry point and files from `frontend/dist/`; the same-origin `/api` paths continue to use the existing Flask routes. Startup fails if the build is missing. `/legacy` serves the retained Jinja implementation; when React serving is disabled, `/` remains the Jinja page.
+- **Verification:** `npm run frontend:build`, `npm run check`, `npm run frontend:test`, `npm run frontend:lint`, and `py scripts/check_frontend_runtime.py`. CI runs these checks after installing the root and frontend lockfiles and Python requirements.
 
 ## 9. Implementation status
 
-The watchlist, account/portfolio read APIs, simulated order and transaction APIs, news feed/article retrieval, cached AI summaries, and stock research suggestions are implemented. Mock market, news, and LLM providers are used by default and can be injected through `create_app`. The frontend shell connects available APIs; chart history, daily P&L, and standalone quote information remain placeholders. Production Kite/news/LLM adapters are unimplemented. OpenAPI and TypeScript declarations cover the live HTTP API. `npm run check` verifies committed generated artifacts and backend tests without rewriting them. Run `npm run contracts:types` only when intentionally regenerating artifacts after an agreed contract change.
+The watchlist, account/portfolio read APIs, simulated order and transaction APIs, news feed/article retrieval, cached AI summaries, and stock research suggestions are implemented. Mock market, news, and LLM providers are used by default and can be injected through `create_app`. The React frontend connects available APIs; chart history, daily P&L, and standalone quote information remain placeholders. Production Kite/news/LLM adapters are unimplemented. OpenAPI and TypeScript declarations cover the live HTTP API. `npm run check` verifies committed generated artifacts and backend tests without rewriting them; the frontend build, API fixture tests, lint, and Flask production-serving smoke check are separate commands run by CI. Run `npm run contracts:types` only when intentionally regenerating artifacts after an agreed contract change.
 
 ## 10. Module ownership boundaries
 
 | Area | Primary modules | Boundary |
 |---|---|---|
-| Browser UI | `templates/index.html`, `static/styles.css`, `static/app.js`, `static/api-types.d.ts` | Calls HTTP endpoints; it does not call providers or access the database. Available backend flows are wired; unsupported data is shown as a placeholder. |
+| Primary browser UI | `frontend/src/`, `frontend/package.json` | React/Vite calls Flask `/api` endpoints; its public types derive from `static/api-types.d.ts`. It does not call providers or access the database. |
+| Legacy browser UI | `templates/index.html`, `static/styles.css`, `static/app.js` | Retained Jinja watchlist page, available at `/legacy` and at `/` when React serving is disabled. |
 | HTTP and validation | `app.py`, `schemas.py` | Routes parse requests, validate with Pydantic, call services, and serialize common errors. |
 | Domain orchestration | `services.py`, `portfolio_service.py`, `trading_service.py`, `news_research_service.py` | Module-level functions receive sessions/providers explicitly and return Pydantic models or raise domain/provider exceptions. |
 | Persistence | `models.py`, `database.py` | SQLAlchemy schema and engine/session setup. |

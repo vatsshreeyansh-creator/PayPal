@@ -7,8 +7,17 @@ interface CommandPaletteProps {
   isOpen: boolean;
   onClose: () => void;
   onNavigate: (view: 'dashboard' | 'watchlist' | 'portfolio' | 'orders' | 'news' | 'research') => void;
-  onSelectStock: (symbol: string) => void;
+  onSelectStock: (stock: StockSummary) => void;
 }
+
+const quickViews = [
+  { label: 'Market Dashboard', view: 'dashboard', icon: Sparkles },
+  { label: 'Watchlist & Discovery', view: 'watchlist', icon: Star },
+  { label: 'Holdings & Portfolio', view: 'portfolio', icon: Briefcase },
+  { label: 'Orders & Transactions', view: 'orders', icon: History },
+  { label: 'Market Intelligence & News', view: 'news', icon: Newspaper },
+  { label: 'AI Grounded Research', view: 'research', icon: Sparkles },
+] as const;
 
 export const CommandPalette: React.FC<CommandPaletteProps> = ({
   isOpen,
@@ -19,6 +28,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   const [query, setQuery] = useState('');
   const [stocks, setStocks] = useState<StockSummary[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -40,6 +50,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   }, [isOpen, onClose]);
 
   useEffect(() => {
+    setSearchError(null);
     if (!query.trim()) {
       setStocks([]);
       return;
@@ -50,8 +61,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       try {
         const results = await api.searchStocks(query.trim(), 5);
         setStocks(results);
-      } catch (err) {
-        console.error(err);
+      } catch (err: unknown) {
+        setSearchError(err instanceof Error ? err.message : 'Stock search failed.');
       } finally {
         setLoading(false);
       }
@@ -90,6 +101,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 
         {/* Results / Navigation Suggestions */}
         <div className="p-2 max-h-80 overflow-y-auto space-y-1">
+          {searchError && <p role="alert" className="px-3 py-2 text-xs text-rose-300">{searchError}</p>}
           {stocks.length > 0 && (
             <div className="mb-2">
               <div className="text-[10px] uppercase font-bold text-slate-500 px-3 py-1">
@@ -99,7 +111,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                 <button
                   key={stock.symbol}
                   onClick={() => {
-                    onSelectStock(stock.symbol);
+                    onSelectStock(stock);
                     onClose();
                   }}
                   className="w-full flex items-center justify-between p-2.5 hover:bg-slate-800 rounded-xl transition-colors text-left group"
@@ -120,20 +132,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             <div className="text-[10px] uppercase font-bold text-slate-500 px-3 py-1">
               Quick Views
             </div>
-            {[
-              { label: 'Market Dashboard', view: 'dashboard', icon: Sparkles },
-              { label: 'Watchlist & Discovery', view: 'watchlist', icon: Star },
-              { label: 'Holdings & Portfolio', view: 'portfolio', icon: Briefcase },
-              { label: 'Orders & Transactions', view: 'orders', icon: History },
-              { label: 'Market Intelligence & News', view: 'news', icon: Newspaper },
-              { label: 'AI Grounded Research', view: 'research', icon: Sparkles },
-            ].map((item) => {
+            {quickViews.map((item) => {
               const Icon = item.icon;
               return (
                 <button
                   key={item.view}
                   onClick={() => {
-                    onNavigate(item.view as any);
+                    onNavigate(item.view);
                     onClose();
                   }}
                   className="w-full flex items-center justify-between p-2.5 hover:bg-slate-800 rounded-xl transition-colors text-left group text-xs text-slate-300"

@@ -1,11 +1,17 @@
 // Web Audio synthesizer for tactile trading sound effects without external audio files
+declare global {
+  interface Window {
+    webkitAudioContext?: typeof AudioContext;
+  }
+}
+
 class SoundEngine {
   private ctx: AudioContext | null = null;
 
   private init() {
     if (!this.ctx && typeof window !== 'undefined') {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (AudioCtx) this.ctx = new AudioCtx();
+      const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+      if (AudioContextConstructor) this.ctx = new AudioContextConstructor();
     }
     if (this.ctx && this.ctx.state === 'suspended') {
       this.ctx.resume();

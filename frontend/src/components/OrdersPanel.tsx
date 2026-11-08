@@ -87,7 +87,7 @@ export const OrdersPanel: React.FC<OrdersPanelProps> = ({
                   return (
                     <tr key={o.order_id} className="hover:bg-slate-800/40 transition-colors">
                       <td className="py-3 pl-2 text-slate-400 font-sans text-[11px]">
-                        {formatDateTime(o.executed_at || o.requested_at)}
+                        {formatDateTime(o.created_at)}
                       </td>
                       <td className="py-3 font-bold text-white font-sans">{o.symbol}</td>
                       <td className="py-3">
@@ -121,7 +121,7 @@ export const OrdersPanel: React.FC<OrdersPanelProps> = ({
                           ) : (
                             <XCircle className="w-3 h-3" />
                           )}
-                          {o.status}
+                          {o.status}{o.rejection_reason ? ` · ${o.rejection_reason}` : ''}
                         </span>
                       </td>
                       <td className="py-3 text-right pr-2 text-slate-400 text-[11px]">
@@ -156,7 +156,7 @@ export const OrdersPanel: React.FC<OrdersPanelProps> = ({
                 transactions.map((tx) => (
                   <tr key={tx.transaction_id} className="hover:bg-slate-800/40 transition-colors">
                     <td className="py-3 pl-2 text-slate-400 font-sans text-[11px]">
-                      {formatDateTime(tx.executed_at)}
+                      {formatDateTime(tx.occurred_at)}
                     </td>
                     <td className="py-3 font-bold text-white font-sans">{tx.symbol}</td>
                     <td className="py-3">
