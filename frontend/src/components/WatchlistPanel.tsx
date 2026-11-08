@@ -1,19 +1,23 @@
 import React, { useState } from 'react';
-import { Search, Star, Trash2, ArrowUpRight, BarChart2, Sparkles, Loader2, Plus } from 'lucide-react';
+import { Search, Star, Trash2, ArrowUpRight, Sparkles, Loader2, Plus } from 'lucide-react';
 import { WatchlistItem, StockSummary } from '../types/api';
 import { formatINR } from '../utils/format';
 import { api } from '../services/api';
 
 interface WatchlistPanelProps {
   watchlist: WatchlistItem[];
-  onSelectStock: (symbol: string, name: string, price: number) => void;
-  onTradeStock: (symbol: string, price: number) => void;
+  loading?: boolean;
+  error?: string | null;
+  onSelectStock: (symbol: string, name: string, price: string | null, simulated: boolean | null) => void;
+  onTradeStock: (symbol: string, price: string | null) => void;
   onResearchStock: (symbol: string) => void;
   onRefresh: () => void;
 }
 
 export const WatchlistPanel: React.FC<WatchlistPanelProps> = ({
   watchlist,
+  loading = false,
+  error = null,
   onSelectStock,
   onTradeStock,
   onResearchStock,
@@ -23,6 +27,7 @@ export const WatchlistPanel: React.FC<WatchlistPanelProps> = ({
   const [searchResults, setSearchResults] = useState<StockSummary[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,31 +41,33 @@ export const WatchlistPanel: React.FC<WatchlistPanelProps> = ({
       if (results.length === 0) {
         setSearchError('No matching NSE equities found.');
       }
-    } catch (err: any) {
-      setSearchError(err.message || 'Search failed.');
+    } catch (err: unknown) {
+      setSearchError(err instanceof Error ? err.message : 'Search failed.');
     } finally {
       setSearching(false);
     }
   };
 
   const handleAdd = async (stock: StockSummary) => {
+    setActionError(null);
     try {
       await api.addToWatchlist(stock.symbol);
       setSearchResults([]);
       setSearchQuery('');
       onRefresh();
-    } catch (err: any) {
-      setSearchError(err.message || 'Failed to add stock to watchlist.');
+    } catch (err: unknown) {
+      setActionError(err instanceof Error ? err.message : 'Failed to add stock to watchlist.');
     }
   };
 
   const handleRemove = async (symbol: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    setActionError(null);
     try {
       await api.removeFromWatchlist(symbol);
       onRefresh();
-    } catch (err: any) {
-      console.error(err);
+    } catch (err: unknown) {
+      setActionError(err instanceof Error ? err.message : 'Failed to remove stock from watchlist.');
     }
   };
 
@@ -113,7 +120,7 @@ export const WatchlistPanel: React.FC<WatchlistPanelProps> = ({
                   <div className="font-bold text-xs text-white flex items-center gap-1.5">
                     {stock.symbol}
                     <span className="text-[10px] text-slate-400 font-normal">
-                      {stock.exchange || 'NSE'}
+                      {stock.exchange}
                     </span>
                   </div>
                   <div className="text-[11px] text-slate-400 line-clamp-1">{stock.name}</div>
@@ -139,10 +146,12 @@ export const WatchlistPanel: React.FC<WatchlistPanelProps> = ({
       {searchError && (
         <div className="text-xs text-rose-400 px-2 mb-3">{searchError}</div>
       )}
+      {error && <div role="alert" className="text-xs text-rose-300 px-2 mb-3">{error}</div>}
+      {actionError && <div role="alert" className="text-xs text-rose-300 px-2 mb-3">{actionError}</div>}
 
       {/* Watchlist Items */}
       <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-        {watchlist.length === 0 ? (
+        {loading ? <p role="status" className="py-8 text-center text-xs text-slate-400">Loading watchlist…</p> : watchlist.length === 0 ? (
           <div className="py-12 text-center text-slate-500">
             <Star className="w-8 h-8 mx-auto mb-2 opacity-30" />
             <p className="text-xs">Your watchlist is currently empty.</p>
@@ -150,11 +159,11 @@ export const WatchlistPanel: React.FC<WatchlistPanelProps> = ({
           </div>
         ) : (
           watchlist.map((item) => {
-            const price = item.quote ? parseFloat(item.quote.price) : 0;
+            const price = item.quote?.price ?? null;
             return (
               <div
                 key={item.stock.symbol}
-                onClick={() => onSelectStock(item.stock.symbol, item.stock.name, price)}
+                onClick={() => onSelectStock(item.stock.symbol, item.stock.name, price, item.quote?.simulated ?? null)}
                 className="group p-3 bg-slate-950/70 hover:bg-slate-800/80 border border-slate-800/80 hover:border-indigo-500/40 rounded-xl transition-all cursor-pointer flex items-center justify-between"
               >
                 <div className="flex-1 min-w-0 pr-2">
@@ -178,9 +187,7 @@ export const WatchlistPanel: React.FC<WatchlistPanelProps> = ({
                     <div className="text-xs font-bold font-mono-nums text-white">
                       {item.quote ? formatINR(item.quote.price) : '—'}
                     </div>
-                    <div className="text-[10px] text-emerald-400 font-semibold flex items-center justify-end gap-0.5">
-                      <ArrowUpRight className="w-3 h-3" /> +0.95%
-                    </div>
+                    <div className="text-[10px] text-slate-500">{item.quote ? (item.quote.simulated ? 'Simulated quote' : 'Provider quote') : 'Unavailable'}</div>
                   </div>
 
                   {/* Quick actions on hover */}

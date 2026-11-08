@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Star, Briefcase, History, Newspaper, Sparkles, TrendingUp, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, Star, Briefcase, History, Newspaper, Sparkles, ShieldCheck } from 'lucide-react';
 
 interface SidebarNavProps {
   currentView: 'dashboard' | 'watchlist' | 'portfolio' | 'orders' | 'news' | 'research';

@@ -1,101 +1,23 @@
-export interface StockSummary {
-  symbol: string;
-  name: string;
-  exchange?: string;
-  isin?: string;
-  eligible?: boolean;
-}
+import type { components } from '../../../static/api-types';
 
-export interface Quote {
-  price: string;
-  currency: string;
-  as_of: string;
-  simulated: boolean;
-}
-
-export interface WatchlistItem {
-  stock: StockSummary;
-  quote: Quote | null;
-  created_at: string;
-}
-
-export interface Holding {
-  stock: StockSummary;
-  quantity: number;
-  average_buy_price: string;
-  quote: Quote | null;
-  market_value: string | null;
-  unrealized_pnl: string | null;
-}
-
-export interface PortfolioSummary {
-  user_id: string;
-  currency: string;
-  as_of: string;
-  cash: string;
-  total_valuation: string | null;
-  incomplete: boolean;
-  holdings: Holding[];
-}
-
-export interface AccountSummary {
-  user_id: string;
-  cash: string;
-  currency: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface Order {
-  order_id: string;
-  user_id: string;
-  symbol: string;
-  side: 'BUY' | 'SELL';
-  quantity: number;
-  order_type: 'MARKET';
-  status: 'FILLED' | 'REJECTED';
-  execution_price: string | null;
-  requested_at: string;
-  executed_at: string | null;
-  failure_code: string | null;
-  failure_reason: string | null;
-}
-
-export interface Transaction {
-  transaction_id: string;
-  order_id: string;
-  user_id: string;
-  symbol: string;
-  side: 'BUY' | 'SELL';
-  quantity: number;
-  price: string;
-  gross_amount: string;
-  executed_at: string;
-}
-
-export interface NewsArticle {
-  article_id: string;
-  title: string;
-  source: string;
-  published_at: string;
-  url?: string;
-  summary?: string;
-  sentiment?: 'bullish' | 'bearish' | 'neutral';
-  stocks?: string[];
-  relevance_reason?: string;
-}
-
-export interface ResearchSuggestion {
-  symbol: string;
-  summary: string;
-  key_catalysts: string[];
-  uncertainty_notes: string[];
-  sources: { title: string; source: string; published_at: string; url?: string }[];
-}
-
-export interface ApiError {
-  code: string;
-  message: string;
-  field?: string | null;
-}
+// Public API types come directly from the generated OpenAPI declarations.
+export type StockSummary = components['schemas']['StockSummary'];
+export type Quote = components['schemas']['Quote'];
+export type WatchlistItem = components['schemas']['WatchlistItem'];
+export type AddWatchlistResponse = components['schemas']['AddWatchlistResponse'];
+export type DeleteWatchlistResponse = components['schemas']['DeleteWatchlistResponse'];
+export type SearchResponse = components['schemas']['SearchResponse'];
+export type AccountSummary = components['schemas']['AccountSummary'];
+export type Holding = components['schemas']['Holding'];
+export type PortfolioSummary = components['schemas']['PortfolioSummary'];
+export type OrderRequest = components['schemas']['OrderRequest'];
+export type OrderResponse = components['schemas']['OrderResponse'];
+export type Order = OrderResponse;
+export type Transaction = components['schemas']['Transaction'];
+export type NewsArticle = components['schemas']['NewsArticle'];
+export type NewsSearchResponse = components['schemas']['NewsSearchResponse'];
+export type SummaryResponse = components['schemas']['SummaryResponse'];
+export type ResearchSuggestion = components['schemas']['ResearchSuggestion'];
+export type ResearchResponse = components['schemas']['ResearchResponse'];
+export type ErrorResponse = components['schemas']['ErrorResponse'];
 
