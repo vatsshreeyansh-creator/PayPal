@@ -1,10 +1,17 @@
 """TradePoint Watchlist Flask API entry point."""
+from typing import Any
 from flask import Flask, jsonify, render_template, request
 from pydantic import ValidationError
 from werkzeug.exceptions import BadRequest, HTTPException
 from config import DEMO_USER_ID, INITIAL_CASH, SECRET_KEY
 from database import SessionLocal, initialize_database
-from provider import MockMarketDataProvider, ProviderUnavailable
+from provider import (
+    MarketDataProvider,
+    MockMarketDataProvider,
+    LiveMarketDataProvider,
+    ProviderUnavailable,
+    get_default_market_provider,
+)
 from schemas import (AddWatchlistRequest, AddWatchlistResponse, DeleteWatchlistResponse,
                      ErrorResponse, GetWatchlistResponse, SearchRequest, SearchResponse)
 from services import StockNotFound, WatchlistItemNotFound, add, list_items, remove, search, seed_instruments
@@ -12,8 +19,8 @@ from portfolio_service import ensure_demo_account, get_account, get_portfolio
 from schemas import AccountSummary, PortfolioSummary, OrderRequest, OrderResponse, Transaction
 from trading_service import (IdempotencyConflict, OrderNotFound, StockNotFound as TradingStockNotFound,
                              get_order, list_orders, list_transactions, place_order)
-from news_provider import NewsProvider
-from llm_provider import LLMProvider
+from news_provider import NewsProvider, get_default_news_provider
+from llm_provider import LLMProvider, get_default_llm_provider
 from mock_research_providers import MockLLMProvider, MockNewsProvider
 from provider import MarketDataProvider
 from schemas import NewsFeedRequest, ResearchRequest
@@ -27,9 +34,9 @@ def create_app(provider: MarketDataProvider | None = None,
                llm_provider: LLMProvider | None = None):
     app = Flask(__name__)
     app.config["SECRET_KEY"] = SECRET_KEY
-    market_data = provider or MockMarketDataProvider()
-    news_data = news_provider or MockNewsProvider()
-    llm_data = llm_provider or MockLLMProvider()
+    market_data = provider or get_default_market_provider()
+    news_data = news_provider or get_default_news_provider()
+    llm_data = llm_provider or get_default_llm_provider()
     initialize_database()
     with SessionLocal() as session:
         seed_instruments(session, market_data)
@@ -194,7 +201,7 @@ def create_app(provider: MarketDataProvider | None = None,
     @app.get("/api/news")
     def news_feed():
         try:
-            params = request.args.to_dict()
+            params: dict[str, Any] = dict(request.args.to_dict())
             if "symbols" in request.args:
                 params["symbols"] = request.args.getlist("symbols")
             feed_request = NewsFeedRequest.model_validate(params)

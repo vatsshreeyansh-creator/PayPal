@@ -1,10 +1,10 @@
 {
   "private": true,
   "scripts": {
-    "contracts:openapi": "python scripts/export_openapi.py",
-    "contracts:types": "npm run contracts:openapi && openapi-typescript openapi.json -o static/api-types.d.ts",
-    "contracts:check-generated": "python scripts/check_openapi.py && openapi-typescript openapi.json --check -o static/api-types.d.ts",
-    "check": "npm run contracts:check-generated && python -m unittest discover -s tests -v",
+    "contracts:openapi": "py scripts/export_openapi.py",
+    "contracts:types": "npm run contracts:openapi && npx openapi-typescript openapi.json -o static/api-types.d.ts",
+    "contracts:check-generated": "py scripts/check_openapi.py && npx openapi-typescript openapi.json --check -o static/api-types.d.ts",
+    "check": "npm run contracts:check-generated && py -m unittest discover -s tests -v",
     "frontend:dev": "npm run dev --prefix frontend",
     "frontend:build": "npm run build --prefix frontend"
   },
