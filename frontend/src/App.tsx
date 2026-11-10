@@ -18,6 +18,7 @@ import { OrdersPanel } from './components/OrdersPanel';
 import { NewsPanel } from './components/NewsPanel';
 import { AiResearchHub } from './components/AiResearchHub';
 import { CommandPalette } from './components/CommandPalette';
+import { MarketsPanel } from './components/MarketsPanel';
 import { formatINR } from './utils/format';
 import {
   Briefcase,
@@ -28,7 +29,7 @@ import {
 
 export function App() {
   const [currentView, setCurrentView] = useState<
-    'dashboard' | 'watchlist' | 'portfolio' | 'orders' | 'news' | 'research'
+    'dashboard' | 'markets' | 'watchlist' | 'portfolio' | 'orders' | 'news' | 'research'
   >('dashboard');
 
   // Core Data
@@ -288,6 +289,10 @@ export function App() {
                 onRefresh={refreshAll}
               />
             </div>
+          )}
+
+          {currentView === 'markets' && (
+            <MarketsPanel watchlist={watchlist} watchlistError={watchlistError} onWatchlistChange={refreshAll} />
           )}
 
           {currentView === 'portfolio' && (

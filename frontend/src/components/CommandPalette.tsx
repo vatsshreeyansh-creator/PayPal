@@ -6,12 +6,13 @@ import { StockSummary } from '../types/api';
 interface CommandPaletteProps {
   isOpen: boolean;
   onClose: () => void;
-  onNavigate: (view: 'dashboard' | 'watchlist' | 'portfolio' | 'orders' | 'news' | 'research') => void;
+  onNavigate: (view: 'dashboard' | 'markets' | 'watchlist' | 'portfolio' | 'orders' | 'news' | 'research') => void;
   onSelectStock: (stock: StockSummary) => void;
 }
 
 const quickViews = [
   { label: 'Market Dashboard', view: 'dashboard', icon: Sparkles },
+  { label: 'Markets', view: 'markets', icon: Search },
   { label: 'Watchlist & Discovery', view: 'watchlist', icon: Star },
   { label: 'Holdings & Portfolio', view: 'portfolio', icon: Briefcase },
   { label: 'Orders & Transactions', view: 'orders', icon: History },

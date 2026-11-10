@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -455,14 +456,20 @@ class ContractTests(unittest.TestCase):
                           for rule in self.app.url_map.iter_rules() if rule.rule.startswith("/api/")}
         self.assertEqual(live_spec_paths, live_app_paths)
 
-    def test_frontend_calls_and_reads_contract_fields(self):
-        path = os.path.join(os.path.dirname(__file__), "..", "templates", "index.html")
-        with open(path, encoding="utf-8") as f:
-            source = f.read()
-        for required in ("/api/stocks/search", "/api/watchlist", "data.results", "data.items",
-                         "item.stock.name", "item.stock.symbol", "item.quote.price",
-                         "item.quote.currency", "item.quote.simulated", "body.error?.message"):
-            self.assertIn(required, source)
+    def test_root_serves_react_production_build(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'<div id="root"></div>', response.data)
+
+    def test_root_explains_missing_react_build(self):
+        with patch("app.Path.is_file", return_value=False):
+            response = self.client.get("/")
+        self.assertEqual(response.status_code, 503)
+        self.assertIn(b"npm run frontend:build", response.data)
+
+    def test_legacy_route_is_removed(self):
+        response = self.client.get("/legacy")
+        self.assertEqual(response.status_code, 404)
 
 
 if __name__ == "__main__":

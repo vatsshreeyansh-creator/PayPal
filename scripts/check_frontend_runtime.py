@@ -26,7 +26,7 @@ atexit.register(cleanup_database)
 
 
 def main() -> None:
-    app = create_app(serve_react=True)
+    app = create_app()
     client = app.test_client()
 
     page = client.get("/")

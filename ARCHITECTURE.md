@@ -20,7 +20,6 @@ The repository is a compact Flask modular backend with a React/Vite frontend:
 | `database.py` | Shared engine/session and SQLite foreign-key setup. |
 | `config.py` | Database URL, demo user ID, secret key. |
 | `frontend/src/` | Primary React/TypeScript user interface. Vite serves it in development and builds it to `frontend/dist/` for Flask production serving. |
-| `templates/index.html`, `static/app.js`, `static/styles.css` | Legacy Jinja watchlist interface retained at `/legacy` and at `/` when React serving is disabled. |
 | `CONTRACTS.md` | Current API and component contracts. |
 | `README.md`, `requirements.txt` | Run and dependency instructions. |
 
@@ -102,10 +101,10 @@ Before coding each group, define exact JSON field names/types, Decimal wire seri
 
 ## 6. Resolved initial simulated-trading decisions
 
-These are explicit MVP assumptions for contract-compatible parallel implementation. They are intentionally simple and do not imply that trading has been implemented.
+These are the implemented MVP trading rules. They are intentionally simple and do not introduce broker execution.
 
 1. **Order type:** `MARKET` only. Limit orders and cancellation are out of scope.
-2. **Execution:** Execute immediately at the mock provider quote returned during submission. Missing quote rejects the order; quote must be marked simulated. No live execution.
+2. **Execution:** Execute immediately using the available positive quote returned during submission. The quote may be simulated (`simulated=true`) or live (`simulated=false`); this flag describes quote provenance, not the order's execution mode. Both outcomes are recorded only in TradePoint's internal paper account. A missing quote, provider outage, or quote that rounds to zero rejects the paper order; no broker order is submitted.
 3. **Costs:** INR, no fees/taxes/slippage in this MVP. Round monetary values to two decimals using decimal half-up; reject a quote that rounds to zero.
 4. **Quantity:** Positive whole shares, integer quantity, maximum 100,000 per order. Fractional shares are unsupported.
 5. **Cash:** One demo account, starting cash INR 1,000,000.00, configured/reset only through development setup; no deposit/withdrawal API. Available cash equals ledger-derived cash because orders execute immediately and none remain pending.
@@ -117,7 +116,7 @@ These are explicit MVP assumptions for contract-compatible parallel implementati
 11. **Money/JSON:** Python `Decimal`, SQLite `NUMERIC`, INR; API money is a string with exactly two decimal places. Order request/response quantities are JSON integers; aggregated holdings/transaction quantities are canonical base-10 integer strings. Never use binary float for calculations.
 12. **Account identity:** Keep `TRADEPOINT_DEMO_USER_ID`; no auth or multiple-user feature in this phase.
 
-The source brief was truncated after “Trading will initially use simulated”. These are documented architecture assumptions, not recovered user requirements. Confirm against the complete brief before implementing trading.
+The original source brief was truncated after “Trading will initially use simulated”. The rules above document the implemented MVP behavior; they should not be interpreted as a commitment to real broker execution.
 
 ## 7. Machine-checkable contract foundation
 
@@ -154,7 +153,7 @@ This split preserves independent work while keeping integration surfaces explici
 
 | Developer | Primary ownership | Must coordinate on |
 |---|---|---|
-| A — Frontend | `frontend/src/`, `frontend/package.json`; `templates/` and `static/` only for explicitly assigned legacy work. | `CONTRACTS.md`/OpenAPI response shapes, enum/status labels, errors, and money formatting. No direct DB/provider imports. |
+| A — Frontend | `frontend/src/`, `frontend/package.json`. | `CONTRACTS.md`/OpenAPI response shapes, enum/status labels, errors, and money formatting. No direct DB/provider imports. |
 | B — Market data | `provider.py`; future `providers/` adapter modules if a real adapter is authorized. | `InstrumentData`, `QuoteData`, `MarketDataProvider`, `ProviderUnavailable`. Do not alter HTTP shapes or DB models independently. |
 | C — Backend/domain integration | `app.py`, `services.py`, `schemas.py`, `models.py`, `database.py`, `config.py`; future account/trading/portfolio services and route modules. | All shared schemas and database migrations. Owns transaction integration and must align with provider owner’s normalized types. |
 
@@ -175,13 +174,13 @@ Avoid assigning different owners to `app.py`, `schemas.py`, and `models.py` in t
 ## 12. Frontend runtime and verification
 
 - **Development:** start Flask with `py app.py` on port 5000, then run `npm run frontend:dev`; Vite serves React on port 5173 and proxies `/api/*` to Flask. The Vite config owns this development proxy.
-- **Production:** run `npm run frontend:build` to create `frontend/dist/`, set `TRADEPOINT_SERVE_REACT=true`, then run `waitress-serve --call --listen=0.0.0.0:5000 app:create_app`. Flask serves the build at `/` and static files from the same build directory. Startup fails if the build is absent. The legacy Jinja page remains available at `/legacy` and at `/` when React serving is disabled.
+- **Production:** run `npm run frontend:build` to create `frontend/dist/`, then run `waitress-serve --call --listen=0.0.0.0:5000 app:create_app`. Flask serves the build at `/` and static files from the same build directory. If the build is absent, `/` returns an actionable 503 response. React is the sole frontend.
 - **API traffic:** the React client always calls relative `/api/...` routes. Vite forwards them during development; in production the browser calls Flask directly on the same origin.
 - **Merge verification:** after installing root and frontend npm lockfiles plus Python requirements, run `npm run frontend:build`, `npm run check`, `npm run frontend:test`, `npm run frontend:lint`, and `py scripts/check_frontend_runtime.py`. GitHub Actions runs all five checks.
 
 ## 13. Current implementation status
 
-The watchlist, account/portfolio, simulated trading, news/article, mock summary, and research APIs are implemented. The React frontend consumes those APIs; historical charting and standalone market quote views remain placeholders. Flask serves the React production build when `TRADEPOINT_SERVE_REACT=true`; the Vite development server proxies API calls to Flask. Production Kite/news/LLM integrations are not implemented.
+The watchlist, account/portfolio, simulated trading, news/article, mock summary, and research APIs are implemented. The React frontend consumes those APIs; historical charting remains unavailable. The Markets view uses stock search and watchlist quote data. The order ticket is embedded in the dashboard and quick-order modal. Flask unconditionally serves the React production build; the Vite development server proxies API calls to Flask. Production provider adapters are documented in provider modules.
 
 ## 14. Ready-to-use developer task briefs
 

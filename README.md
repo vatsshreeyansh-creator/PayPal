@@ -21,7 +21,7 @@ py app.py
 npm run frontend:dev
 ```
 
-Open <http://localhost:5173>. Vite serves React with hot reload and proxies relative `/api/...` requests to Flask at `http://127.0.0.1:5000`. Flask's `/` remains the legacy Jinja page during development; it is also available at `/legacy`.
+Open <http://localhost:5173>. Vite serves the React application with hot reload and proxies relative `/api/...` requests to Flask at `http://127.0.0.1:5000`.
 
 ## Production startup
 
@@ -31,21 +31,20 @@ Build the React application, install the Python dependencies, and start Flask th
 npm ci --prefix frontend
 npm run frontend:build
 py -m pip install -r requirements.txt
-$env:TRADEPOINT_SERVE_REACT = "true"
 waitress-serve --call --listen=0.0.0.0:5000 app:create_app
 ```
 
-Flask serves `frontend/dist/index.html` at `/` and the built files (including `/assets/...`) from that directory. The React app calls relative `/api/...` URLs, so the browser uses the same Flask origin in production; no Vite proxy or CORS configuration is needed. Startup fails with a clear error if React serving is enabled but `frontend/dist/index.html` is missing. Set `TRADEPOINT_SERVE_REACT=false` to use the legacy Jinja page instead.
+Flask serves `frontend/dist/index.html` at `/` and the built files (including `/assets/...`) from that directory. The React app calls relative `/api/...` URLs, so the browser uses the same Flask origin in production; no Vite proxy or CORS configuration is needed. If the build is missing, `/` returns an actionable 503 response instructing you to run `npm run frontend:build`.
 
 For a deployment, configure a persistent `TRADEPOINT_DATABASE_URL`, a non-development `TRADEPOINT_SECRET_KEY`, and an HTTPS reverse proxy in front of Waitress. The included command is a WSGI application server, but TLS termination, domain/DNS, process supervision, and database backups are deployment responsibilities.
 
-Configuration variables include `TRADEPOINT_DATABASE_URL`, `TRADEPOINT_DEMO_USER_ID`, `TRADEPOINT_INITIAL_CASH` (default `1000000.00` INR), `TRADEPOINT_SECRET_KEY`, and `TRADEPOINT_SERVE_REACT`. Initial cash is used only when the account is first created; changing the setting does not reset an existing account. Authentication and multiple user accounts are not implemented.
+Configuration variables include `TRADEPOINT_DATABASE_URL`, `TRADEPOINT_DEMO_USER_ID`, `TRADEPOINT_INITIAL_CASH` (default `1000000.00` INR), and `TRADEPOINT_SECRET_KEY`. Initial cash is used only when the account is first created; changing the setting does not reset an existing account. Authentication and multiple user accounts are not implemented.
 
 ## Frontend/backend architecture
 
 React/Vite is the primary product frontend. It calls Flask JSON endpoints only; it does not access SQLAlchemy or providers directly. Flask validates API requests with Pydantic, calls module-level services, and reads/writes through SQLAlchemy. Market/news/LLM adapters sit behind normalized provider interfaces. In development, Vite proxies `/api` to Flask; in production, Flask serves the Vite build and those same relative API calls return to Flask on the same origin.
 
-Vite's production output is `frontend/dist/` (ignored by Git and recreated by `npm run frontend:build`). The legacy Jinja implementation remains available at `/legacy` and at `/` when `TRADEPOINT_SERVE_REACT` is false.
+Vite's production output is `frontend/dist/` (ignored by Git and recreated by `npm run frontend:build`). React is the sole frontend and Flask serves the build in production. The Markets view searches NSE equities and obtains available quote information through the existing watchlist API; the order ticket remains embedded in the dashboard and quick-order modal.
 
 ## JSON API
 

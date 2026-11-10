@@ -1,14 +1,15 @@
 import React from 'react';
-import { LayoutDashboard, Star, Briefcase, History, Newspaper, Sparkles, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, Star, Briefcase, History, Newspaper, Sparkles, ShieldCheck, CandlestickChart } from 'lucide-react';
 
 interface SidebarNavProps {
-  currentView: 'dashboard' | 'watchlist' | 'portfolio' | 'orders' | 'news' | 'research';
-  onNavigate: (view: 'dashboard' | 'watchlist' | 'portfolio' | 'orders' | 'news' | 'research') => void;
+  currentView: 'dashboard' | 'markets' | 'watchlist' | 'portfolio' | 'orders' | 'news' | 'research';
+  onNavigate: (view: 'dashboard' | 'markets' | 'watchlist' | 'portfolio' | 'orders' | 'news' | 'research') => void;
 }
 
 export const SidebarNav: React.FC<SidebarNavProps> = ({ currentView, onNavigate }) => {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'markets', label: 'Markets', icon: CandlestickChart },
     { id: 'watchlist', label: 'Watchlist', icon: Star },
     { id: 'portfolio', label: 'Portfolio', icon: Briefcase },
     { id: 'orders', label: 'Orders & Activity', icon: History },
