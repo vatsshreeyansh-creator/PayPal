@@ -16,6 +16,15 @@ import type {
   SummaryResponse,
   Transaction,
   WatchlistItem,
+  PayPalCreateOrderRequest,
+  PayPalCreateOrderResponse,
+  PayPalCaptureOrderRequest,
+  PayPalCaptureOrderResponse,
+  PayPalCancelOrderRequest,
+  PayPalCancelOrderResponse,
+  WalletSummaryResponse,
+  WalletHistoryItem,
+  WalletHistoryResponse,
 } from '../types/api';
 
 export class ApiError extends Error {
@@ -166,6 +175,41 @@ function isErrorResponse(value: unknown): value is ErrorResponse {
     isString(value.error.message) && isNullableString(value.error.field);
 }
 
+function isWalletSummary(value: unknown): value is WalletSummaryResponse {
+  return isRecord(value) && isString(value.account_id) && value.currency === 'INR' &&
+    isMoney(value.cash_balance) && isMoney(value.total_deposited) &&
+    (value.payment_mode === undefined || value.payment_mode === null || value.payment_mode === 'mock' || value.payment_mode === 'sandbox');
+}
+
+function isPayPalCreateOrderResponse(value: unknown): value is PayPalCreateOrderResponse {
+  return isRecord(value) && isString(value.deposit_id) && isString(value.paypal_order_id) &&
+    value.status === 'CREATED' && isMoney(value.payment_amount) && value.payment_currency === 'USD' &&
+    (value.payment_mode === undefined || value.payment_mode === null || value.payment_mode === 'mock' || value.payment_mode === 'sandbox') &&
+    (value.approval_url === undefined || value.approval_url === null || isString(value.approval_url));
+}
+
+function isPayPalCaptureOrderResponse(value: unknown): value is PayPalCaptureOrderResponse {
+  return isRecord(value) && isString(value.deposit_id) && isString(value.paypal_order_id) &&
+    (value.status === 'COMPLETED' || value.status === 'REQUIRES_RECONCILIATION' || value.status === 'FAILED') &&
+    isMoney(value.payment_amount) && value.payment_currency === 'USD' && value.wallet_currency === 'INR' &&
+    isMoney(value.updated_cash_balance);
+}
+
+function isPayPalCancelOrderResponse(value: unknown): value is PayPalCancelOrderResponse {
+  return isRecord(value) && isString(value.deposit_id) && isString(value.paypal_order_id) &&
+    value.status === 'CANCELLED';
+}
+
+function isWalletHistoryItem(value: unknown): value is WalletHistoryItem {
+  return isRecord(value) && typeof value.entry_id === 'number' && isString(value.entry_key) &&
+    isString(value.category) && isString(value.amount) && value.currency === 'INR' &&
+    isString(value.description) && isString(value.created_at);
+}
+
+function isWalletHistoryResponse(value: unknown): value is WalletHistoryResponse {
+  return isRecord(value) && Array.isArray(value.items) && value.items.every(isWalletHistoryItem);
+}
+
 async function request<T>(endpoint: string, guard: Guard<T>, options: RequestInit = {}): Promise<T> {
   const response = await fetch(endpoint, {
     ...options,
@@ -243,5 +287,23 @@ export const api = {
   sendConversationMessage: (conversationId: string, requestId: string, content: string): Promise<ConversationResponse> =>
     request(`/api/conversations/${encodeURIComponent(conversationId)}/messages`, isConversation,
       { method: 'POST', body: JSON.stringify({ request_id: requestId, content }) }),
+
+  getWalletSummary: (): Promise<WalletSummaryResponse> =>
+    request('/api/wallet', isWalletSummary),
+
+  getWalletHistory: (): Promise<WalletHistoryResponse> =>
+    request('/api/wallet/history', isWalletHistoryResponse),
+
+  createPayPalOrder: (data: PayPalCreateOrderRequest): Promise<PayPalCreateOrderResponse> =>
+    request('/api/wallet/paypal/create-order', isPayPalCreateOrderResponse,
+      { method: 'POST', body: JSON.stringify(data) }),
+
+  capturePayPalOrder: (data: PayPalCaptureOrderRequest): Promise<PayPalCaptureOrderResponse> =>
+    request('/api/wallet/paypal/capture-order', isPayPalCaptureOrderResponse,
+      { method: 'POST', body: JSON.stringify(data) }),
+
+  cancelPayPalOrder: (data: PayPalCancelOrderRequest): Promise<PayPalCancelOrderResponse> =>
+    request('/api/wallet/paypal/cancel-order', isPayPalCancelOrderResponse,
+      { method: 'POST', body: JSON.stringify(data) }),
 };
 

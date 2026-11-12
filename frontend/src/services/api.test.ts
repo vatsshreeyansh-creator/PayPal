@@ -151,5 +151,44 @@ describe('React API contract', () => {
     stubJson({ items: [] });
     await expect(api.getNews()).rejects.toThrow('does not match the API contract');
   });
+
+  it('supports wallet summary, history, and PayPal lifecycle API contracts', async () => {
+    // Wallet Summary
+    const walletSum = { account_id: 'demo-user', currency: 'INR' as const, cash_balance: '1000000.00', total_deposited: '8202.50' };
+    stubJson(walletSum);
+    expect(await api.getWalletSummary()).toEqual(walletSum);
+
+    // Create Order
+    const createRes = { deposit_id: 'dep-1', paypal_order_id: 'PP-1', status: 'CREATED' as const, payment_amount: '100.00', payment_currency: 'USD' as const };
+    stubJson(createRes, 201);
+    expect(await api.createPayPalOrder({ amount: '100.00', currency: 'USD', idempotency_key: 'key-1' })).toEqual(createRes);
+
+    // Capture Order
+    const capRes = {
+      deposit_id: 'dep-1', paypal_order_id: 'PP-1', paypal_capture_id: 'CAP-1', status: 'COMPLETED' as const,
+      payment_amount: '100.00', payment_currency: 'USD' as const, paypal_fee_amount: '3.50',
+      net_payment_amount: '96.50', exchange_rate: '85.000000', wallet_credit_amount: '8202.50',
+      wallet_currency: 'INR' as const, updated_cash_balance: '1008202.50',
+    };
+    stubJson(capRes);
+    expect(await api.capturePayPalOrder({ paypal_order_id: 'PP-1' })).toEqual(capRes);
+
+    // Cancel Order
+    const cancelRes = { deposit_id: 'dep-1', paypal_order_id: 'PP-1', status: 'CANCELLED' as const };
+    stubJson(cancelRes);
+    expect(await api.cancelPayPalOrder({ paypal_order_id: 'PP-1' })).toEqual(cancelRes);
+
+    // Wallet History
+    const historyRes = {
+      items: [{
+        entry_id: 1, entry_key: 'PAYPAL_DEPOSIT:PP-1', category: 'DEPOSIT' as const,
+        amount: '+8202.50', currency: 'INR' as const, description: 'PayPal deposit',
+        reference_id: 'PP-1', payment_amount: '100.00', payment_currency: 'USD',
+        exchange_rate: '85.000000', created_at: '2026-11-12T10:00:00Z',
+      }],
+    };
+    stubJson(historyRes);
+    expect(await api.getWalletHistory()).toEqual(historyRes);
+  });
 });
 

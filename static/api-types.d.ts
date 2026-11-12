@@ -244,6 +244,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/wallet/paypal/create-order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createPayPalOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/wallet/paypal/capture-order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["capturePayPalOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/wallet/paypal/cancel-order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["cancelPayPalOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/wallet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getWalletSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/wallet/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getWalletHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -668,6 +748,234 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /** PayPalCreateOrderRequest */
+        PayPalCreateOrderRequest: {
+            /** Amount */
+            amount: string;
+            /**
+             * Currency
+             * @default USD
+             * @constant
+             */
+            currency: "USD";
+            /** Idempotency Key */
+            idempotency_key: string;
+        };
+        /** PayPalCreateOrderResponse */
+        PayPalCreateOrderResponse: {
+            /** Deposit Id */
+            deposit_id: string;
+            /** Paypal Order Id */
+            paypal_order_id: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "CREATED";
+            /** Payment Amount */
+            payment_amount: string;
+            /**
+             * Payment Currency
+             * @constant
+             */
+            payment_currency: "USD";
+            /**
+             * Payment Mode
+             * @default null
+             */
+            payment_mode: ("mock" | "sandbox") | null;
+            /**
+             * Approval Url
+             * @default null
+             */
+            approval_url: string | null;
+        };
+        /** PayPalCaptureOrderRequest */
+        PayPalCaptureOrderRequest: {
+            /** Paypal Order Id */
+            paypal_order_id: string;
+        };
+        /** PayPalCaptureOrderResponse */
+        PayPalCaptureOrderResponse: {
+            /** Deposit Id */
+            deposit_id: string;
+            /** Paypal Order Id */
+            paypal_order_id: string;
+            /**
+             * Paypal Capture Id
+             * @default null
+             */
+            paypal_capture_id: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "COMPLETED" | "REQUIRES_RECONCILIATION" | "FAILED";
+            /** Payment Amount */
+            payment_amount: string;
+            /**
+             * Payment Currency
+             * @constant
+             */
+            payment_currency: "USD";
+            /**
+             * Paypal Fee Amount
+             * @default null
+             */
+            paypal_fee_amount: string | null;
+            /**
+             * Paypal Fee Currency
+             * @default null
+             */
+            paypal_fee_currency: string | null;
+            /**
+             * Paypal Fee In Receivable Currency
+             * @default null
+             */
+            paypal_fee_in_receivable_currency: string | null;
+            /**
+             * Paypal Fee In Receivable Currency Code
+             * @default null
+             */
+            paypal_fee_in_receivable_currency_code: string | null;
+            /**
+             * Net Payment Amount
+             * @default null
+             */
+            net_payment_amount: string | null;
+            /**
+             * Exchange Rate
+             * @default null
+             */
+            exchange_rate: string | null;
+            /**
+             * Exchange Rate Source Currency
+             * @default null
+             */
+            exchange_rate_source_currency: string | null;
+            /**
+             * Exchange Rate Target Currency
+             * @default null
+             */
+            exchange_rate_target_currency: string | null;
+            /**
+             * Wallet Credit Amount
+             * @default null
+             */
+            wallet_credit_amount: string | null;
+            /**
+             * Wallet Currency
+             * @default INR
+             * @constant
+             */
+            wallet_currency: "INR";
+            /** Updated Cash Balance */
+            updated_cash_balance: string;
+            /**
+             * Failure Code
+             * @default null
+             */
+            failure_code: string | null;
+            /**
+             * Failure Reason
+             * @default null
+             */
+            failure_reason: string | null;
+            /**
+             * Completed At
+             * @default null
+             */
+            completed_at: string | null;
+        };
+        /** PayPalCancelOrderRequest */
+        PayPalCancelOrderRequest: {
+            /** Paypal Order Id */
+            paypal_order_id: string;
+        };
+        /** PayPalCancelOrderResponse */
+        PayPalCancelOrderResponse: {
+            /** Deposit Id */
+            deposit_id: string;
+            /** Paypal Order Id */
+            paypal_order_id: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "CANCELLED";
+        };
+        /** WalletSummaryResponse */
+        WalletSummaryResponse: {
+            /** Account Id */
+            account_id: string;
+            /**
+             * Currency
+             * @default INR
+             * @constant
+             */
+            currency: "INR";
+            /** Cash Balance */
+            cash_balance: string;
+            /** Total Deposited */
+            total_deposited: string;
+            /**
+             * Payment Mode
+             * @default null
+             */
+            payment_mode: ("mock" | "sandbox") | null;
+        };
+        /** WalletHistoryItem */
+        WalletHistoryItem: {
+            /** Entry Id */
+            entry_id: number;
+            /** Entry Key */
+            entry_key: string;
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "INITIAL_CASH" | "DEPOSIT" | "STOCK_BUY" | "STOCK_SELL" | "SUBSCRIPTION" | "REPORT_PURCHASE" | "REFUND";
+            /** Amount */
+            amount: string;
+            /**
+             * Currency
+             * @default INR
+             * @constant
+             */
+            currency: "INR";
+            /** Description */
+            description: string;
+            /**
+             * Reference Id
+             * @default null
+             */
+            reference_id: string | null;
+            /**
+             * Payment Amount
+             * @default null
+             */
+            payment_amount: string | null;
+            /**
+             * Payment Currency
+             * @default null
+             */
+            payment_currency: string | null;
+            /**
+             * Exchange Rate
+             * @default null
+             */
+            exchange_rate: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** WalletHistoryResponse */
+        WalletHistoryResponse: {
+            /** Items */
+            items: components["schemas"]["WalletHistoryItem"][];
         };
     };
     responses: never;
@@ -1636,6 +1944,307 @@ export interface operations {
             };
             /** @description LLM unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createPayPalOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PayPalCreateOrderRequest"];
+            };
+        };
+        responses: {
+            /** @description Idempotent replay */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PayPalCreateOrderResponse"];
+                };
+            };
+            /** @description Order created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PayPalCreateOrderResponse"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Method not allowed */
+            405: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Idempotency key conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected server or persistence error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PayPal unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    capturePayPalOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PayPalCaptureOrderRequest"];
+            };
+        };
+        responses: {
+            /** @description Order captured and verified */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PayPalCaptureOrderResponse"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Deposit not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Method not allowed */
+            405: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid deposit state */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected server or persistence error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PayPal unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    cancelPayPalOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PayPalCancelOrderRequest"];
+            };
+        };
+        responses: {
+            /** @description Order cancelled */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PayPalCancelOrderResponse"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Deposit not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Method not allowed */
+            405: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Cannot cancel deposit */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected server or persistence error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getWalletSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Wallet summary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WalletSummaryResponse"];
+                };
+            };
+            /** @description Method not allowed */
+            405: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Account not initialized */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getWalletHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Wallet cash movement history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WalletHistoryResponse"];
+                };
+            };
+            /** @description Method not allowed */
+            405: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Account not initialized */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

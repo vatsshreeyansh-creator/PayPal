@@ -10,13 +10,21 @@ from schemas import (AddWatchlistRequest, AddWatchlistResponse, DeleteWatchlistR
                      Transaction, NewsArticle, NewsSearchResponse, NewsFeedRequest,
                      SummaryResponse, ResearchSuggestion, ResearchResponse, ResearchRequest,
                      ConversationCreateRequest, ConversationMessageRequest,
-                     ConversationTurn, ConversationResponse)
+                     ConversationTurn, ConversationResponse,
+                     PayPalCreateOrderRequest, PayPalCreateOrderResponse,
+                     PayPalCaptureOrderRequest, PayPalCaptureOrderResponse,
+                     PayPalCancelOrderRequest, PayPalCancelOrderResponse,
+                     WalletSummaryResponse, WalletHistoryItem, WalletHistoryResponse)
 
 MODELS = [AddWatchlistRequest, AddWatchlistResponse, DeleteWatchlistResponse, ErrorResponse,
           GetWatchlistResponse, SearchRequest, SearchResponse, AccountSummary, Holding,
           PortfolioSummary, OrderRequest, OrderResponse, Transaction, NewsArticle,
           NewsSearchResponse, NewsFeedRequest, SummaryResponse, ResearchSuggestion, ResearchResponse, ResearchRequest]
 MODELS += [ConversationCreateRequest, ConversationMessageRequest, ConversationTurn, ConversationResponse]
+MODELS += [PayPalCreateOrderRequest, PayPalCreateOrderResponse,
+           PayPalCaptureOrderRequest, PayPalCaptureOrderResponse,
+           PayPalCancelOrderRequest, PayPalCancelOrderResponse,
+           WalletSummaryResponse, WalletHistoryItem, WalletHistoryResponse]
 
 
 def make_spec():
@@ -112,6 +120,30 @@ def make_spec():
             "responses": responses({"200": {"description": "Conversation including the new user and assistant turns", "content": json_content("ConversationResponse")}},
                                    [(400, "Invalid message"), (404, "Conversation not found"),
                                     (409, "Message request ID conflict"), (503, "LLM unavailable")])}}
+        ,"/api/wallet/paypal/create-order": {"post": {
+            "operationId": "createPayPalOrder",
+            "requestBody": {"required": True, "content": json_content("PayPalCreateOrderRequest")},
+            "responses": responses({"201": {"description": "Order created", "content": json_content("PayPalCreateOrderResponse")},
+                                   "200": {"description": "Idempotent replay", "content": json_content("PayPalCreateOrderResponse")}},
+                                   [(400, "Invalid request"), (409, "Idempotency key conflict"), (503, "PayPal unavailable")])}},
+        "/api/wallet/paypal/capture-order": {"post": {
+            "operationId": "capturePayPalOrder",
+            "requestBody": {"required": True, "content": json_content("PayPalCaptureOrderRequest")},
+            "responses": responses({"200": {"description": "Order captured and verified", "content": json_content("PayPalCaptureOrderResponse")}},
+                                   [(400, "Invalid request"), (404, "Deposit not found"), (422, "Invalid deposit state"), (503, "PayPal unavailable")])}},
+        "/api/wallet/paypal/cancel-order": {"post": {
+            "operationId": "cancelPayPalOrder",
+            "requestBody": {"required": True, "content": json_content("PayPalCancelOrderRequest")},
+            "responses": responses({"200": {"description": "Order cancelled", "content": json_content("PayPalCancelOrderResponse")}},
+                                   [(400, "Invalid request"), (404, "Deposit not found"), (422, "Cannot cancel deposit")])}},
+        "/api/wallet": {"get": {
+            "operationId": "getWalletSummary",
+            "responses": responses({"200": {"description": "Wallet summary", "content": json_content("WalletSummaryResponse")}},
+                                   [(500, "Account not initialized")])}},
+        "/api/wallet/history": {"get": {
+            "operationId": "getWalletHistory",
+            "responses": responses({"200": {"description": "Wallet cash movement history", "content": json_content("WalletHistoryResponse")}},
+                                   [(500, "Account not initialized")])}}
     })
     return {"openapi": "3.1.0", "info": {"title": "TradePoint API", "version": "0.1.0"},
             "paths": paths, "components": {"schemas": components}}

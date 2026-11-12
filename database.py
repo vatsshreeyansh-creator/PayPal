@@ -18,3 +18,18 @@ SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 def initialize_database():
     Base.metadata.create_all(engine)
+    if DATABASE_URL.startswith("sqlite"):
+        with engine.connect() as conn:
+            cols = [row[1] for row in conn.exec_driver_sql("PRAGMA table_info(payment_deposits)").fetchall()]
+            if cols:
+                if "claimed_at" not in cols:
+                    conn.exec_driver_sql("ALTER TABLE payment_deposits ADD COLUMN claimed_at TIMESTAMP")
+                if "paypal_fee_in_receivable_currency" not in cols:
+                    conn.exec_driver_sql("ALTER TABLE payment_deposits ADD COLUMN paypal_fee_in_receivable_currency NUMERIC(18, 2)")
+                if "paypal_fee_in_receivable_currency_code" not in cols:
+                    conn.exec_driver_sql("ALTER TABLE payment_deposits ADD COLUMN paypal_fee_in_receivable_currency_code VARCHAR(3)")
+                if "approval_url" not in cols:
+                    conn.exec_driver_sql("ALTER TABLE payment_deposits ADD COLUMN approval_url VARCHAR(512)")
+                if "is_provider_confirmed_terminal" not in cols:
+                    conn.exec_driver_sql("ALTER TABLE payment_deposits ADD COLUMN is_provider_confirmed_terminal BOOLEAN DEFAULT 0 NOT NULL")
+                conn.commit()

@@ -3,8 +3,8 @@ const { spawnSync } = require('child_process');
 
 const args = process.argv.slice(2);
 const isWin = process.platform === 'win32';
-// On Windows try 'py' first (standard launcher); on Linux/CI try 'python' then 'python3'
-const candidates = isWin ? ['py', 'python', 'python3'] : ['python', 'python3', 'py'];
+// Try 'python' first (or active environment), then standard launcher candidates
+const candidates = isWin ? ['python', 'py', 'python3'] : ['python', 'python3', 'py'];
 
 let result = null;
 for (const cmd of candidates) {

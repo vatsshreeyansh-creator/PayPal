@@ -1,9 +1,11 @@
 import React from 'react';
-import { LayoutDashboard, Star, Briefcase, History, Newspaper, Sparkles, ShieldCheck, CandlestickChart } from 'lucide-react';
+import { LayoutDashboard, Star, Briefcase, History, Newspaper, Sparkles, ShieldCheck, CandlestickChart, Wallet } from 'lucide-react';
+
+export type NavigationView = 'dashboard' | 'markets' | 'watchlist' | 'portfolio' | 'orders' | 'wallet' | 'news' | 'research';
 
 interface SidebarNavProps {
-  currentView: 'dashboard' | 'markets' | 'watchlist' | 'portfolio' | 'orders' | 'news' | 'research';
-  onNavigate: (view: 'dashboard' | 'markets' | 'watchlist' | 'portfolio' | 'orders' | 'news' | 'research') => void;
+  currentView: NavigationView;
+  onNavigate: (view: NavigationView) => void;
 }
 
 export const SidebarNav: React.FC<SidebarNavProps> = ({ currentView, onNavigate }) => {
@@ -13,6 +15,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({ currentView, onNavigate 
     { id: 'watchlist', label: 'Watchlist', icon: Star },
     { id: 'portfolio', label: 'Portfolio', icon: Briefcase },
     { id: 'orders', label: 'Orders & Activity', icon: History },
+    { id: 'wallet', label: 'Wallet & Deposits', icon: Wallet },
     { id: 'news', label: 'Market News', icon: Newspaper },
     { id: 'research', label: 'AI Research', icon: Sparkles },
   ] as const;

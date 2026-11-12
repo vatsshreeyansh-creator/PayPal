@@ -416,3 +416,136 @@ class ConversationResponse(ContractModel):
     def serialize_conversation_created_at(self, value: datetime) -> str:
         value = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
         return value.isoformat().replace("+00:00", "Z")
+
+
+# Wallet and PayPal Sandbox (USD payment -> INR ledger settlement)
+class PayPalCreateOrderRequest(ContractModel):
+    amount: str
+    currency: Literal["USD"] = "USD"
+    idempotency_key: str = Field(min_length=1, max_length=128)
+
+    @field_validator("amount")
+    @classmethod
+    def valid_deposit_amount(cls, value: str) -> str:
+        if not re.fullmatch(r"(?:0|[1-9]\d*)\.\d{2}", value):
+            raise ValueError("amount must be a decimal string with two fractional digits")
+        try:
+            val = Decimal(value)
+        except InvalidOperation as exc:
+            raise ValueError("amount must be a decimal string") from exc
+        if val <= 0:
+            raise ValueError("amount must be positive")
+        return value
+
+    @field_validator("idempotency_key")
+    @classmethod
+    def clean_idempotency_key(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("idempotency_key must not be empty")
+        return value
+
+
+class PayPalCreateOrderResponse(ContractModel):
+    deposit_id: str
+    paypal_order_id: str
+    status: Literal["CREATED"]
+    payment_amount: str
+    payment_currency: Literal["USD"]
+    payment_mode: Literal["mock", "sandbox"] | None = None
+    approval_url: str | None = None
+
+
+class PayPalCaptureOrderRequest(ContractModel):
+    paypal_order_id: str = Field(min_length=1, max_length=64)
+
+    @field_validator("paypal_order_id")
+    @classmethod
+    def clean_paypal_order_id(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("paypal_order_id must not be empty")
+        return value
+
+
+class PayPalCaptureOrderResponse(ContractModel):
+    deposit_id: str
+    paypal_order_id: str
+    paypal_capture_id: str | None = None
+    status: Literal["COMPLETED", "REQUIRES_RECONCILIATION", "FAILED"]
+    payment_amount: str
+    payment_currency: Literal["USD"]
+    paypal_fee_amount: str | None = None
+    paypal_fee_currency: str | None = None
+    paypal_fee_in_receivable_currency: str | None = None
+    paypal_fee_in_receivable_currency_code: str | None = None
+    net_payment_amount: str | None = None
+    exchange_rate: str | None = None
+    exchange_rate_source_currency: str | None = None
+    exchange_rate_target_currency: str | None = None
+    wallet_credit_amount: str | None = None
+    wallet_currency: Literal["INR"] = "INR"
+    updated_cash_balance: str
+    failure_code: str | None = None
+    failure_reason: str | None = None
+    completed_at: datetime | None = None
+
+    @field_serializer("completed_at")
+    def serialize_completed_at(self, value: datetime | None) -> str | None:
+        if value is None:
+            return None
+        value = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+        return value.isoformat().replace("+00:00", "Z")
+
+
+class PayPalCancelOrderRequest(ContractModel):
+    paypal_order_id: str = Field(min_length=1, max_length=64)
+
+    @field_validator("paypal_order_id")
+    @classmethod
+    def clean_paypal_order_id(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("paypal_order_id must not be empty")
+        return value
+
+
+class PayPalCancelOrderResponse(ContractModel):
+    deposit_id: str
+    paypal_order_id: str
+    status: Literal["CANCELLED"]
+
+
+class WalletSummaryResponse(ContractModel):
+    account_id: str
+    currency: Literal["INR"] = "INR"
+    cash_balance: str
+    total_deposited: str
+    payment_mode: Literal["mock", "sandbox"] | None = None
+
+
+class WalletHistoryItem(ContractModel):
+    entry_id: int
+    entry_key: str
+    category: Literal[
+        "INITIAL_CASH", "DEPOSIT", "STOCK_BUY", "STOCK_SELL",
+        "SUBSCRIPTION", "REPORT_PURCHASE", "REFUND"
+    ]
+    amount: str
+    currency: Literal["INR"] = "INR"
+    description: str
+    reference_id: str | None = None
+    payment_amount: str | None = None
+    payment_currency: str | None = None
+    exchange_rate: str | None = None
+    created_at: datetime
+
+    @field_serializer("created_at")
+    def serialize_history_created_at(self, value: datetime) -> str:
+        value = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+        return value.isoformat().replace("+00:00", "Z")
+
+
+class WalletHistoryResponse(ContractModel):
+    items: list[WalletHistoryItem]
+

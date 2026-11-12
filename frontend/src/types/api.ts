@@ -25,3 +25,13 @@ export type ConversationTurn = components['schemas']['ConversationTurn'];
 export type ConversationResponse = components['schemas']['ConversationResponse'];
 export type ErrorResponse = components['schemas']['ErrorResponse'];
 
+export type PayPalCreateOrderRequest = components['schemas']['PayPalCreateOrderRequest'];
+export type PayPalCreateOrderResponse = components['schemas']['PayPalCreateOrderResponse'];
+export type PayPalCaptureOrderRequest = components['schemas']['PayPalCaptureOrderRequest'];
+export type PayPalCaptureOrderResponse = components['schemas']['PayPalCaptureOrderResponse'];
+export type PayPalCancelOrderRequest = components['schemas']['PayPalCancelOrderRequest'];
+export type PayPalCancelOrderResponse = components['schemas']['PayPalCancelOrderResponse'];
+export type WalletSummaryResponse = components['schemas']['WalletSummaryResponse'];
+export type WalletHistoryItem = components['schemas']['WalletHistoryItem'];
+export type WalletHistoryResponse = components['schemas']['WalletHistoryResponse'];
+

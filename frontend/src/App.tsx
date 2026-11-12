@@ -19,6 +19,7 @@ import { NewsPanel } from './components/NewsPanel';
 import { AiResearchHub } from './components/AiResearchHub';
 import { CommandPalette } from './components/CommandPalette';
 import { MarketsPanel } from './components/MarketsPanel';
+import { WalletPanel } from './components/WalletPanel';
 import { formatINR } from './utils/format';
 import {
   Briefcase,
@@ -29,7 +30,7 @@ import {
 
 export function App() {
   const [currentView, setCurrentView] = useState<
-    'dashboard' | 'markets' | 'watchlist' | 'portfolio' | 'orders' | 'news' | 'research'
+    'dashboard' | 'markets' | 'watchlist' | 'portfolio' | 'orders' | 'wallet' | 'news' | 'research'
   >('dashboard');
 
   // Core Data
@@ -171,6 +172,7 @@ export function App() {
         availableCash={availableCash}
         onOpenSearch={() => setIsSearchOpen(true)}
         onNewOrder={() => setIsOrderModalOpen(true)}
+        onOpenWallet={() => setCurrentView('wallet')}
       />
 
       <div className="flex-1 flex overflow-hidden">
@@ -321,6 +323,10 @@ export function App() {
                 onRefresh={refreshAll}
               />
             </div>
+          )}
+
+          {currentView === 'wallet' && (
+            <WalletPanel onBalanceUpdated={refreshAll} />
           )}
 
           {currentView === 'news' && (

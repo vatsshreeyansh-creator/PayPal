@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Search, ArrowRight, Star, Briefcase, History, Newspaper, Sparkles, X, Loader2 } from 'lucide-react';
+import { Search, ArrowRight, Star, Briefcase, History, Newspaper, Sparkles, X, Loader2, Wallet } from 'lucide-react';
 import { api } from '../services/api';
 import { StockSummary } from '../types/api';
 
 interface CommandPaletteProps {
   isOpen: boolean;
   onClose: () => void;
-  onNavigate: (view: 'dashboard' | 'markets' | 'watchlist' | 'portfolio' | 'orders' | 'news' | 'research') => void;
+  onNavigate: (view: 'dashboard' | 'markets' | 'watchlist' | 'portfolio' | 'orders' | 'wallet' | 'news' | 'research') => void;
   onSelectStock: (stock: StockSummary) => void;
 }
 
@@ -16,6 +16,7 @@ const quickViews = [
   { label: 'Watchlist & Discovery', view: 'watchlist', icon: Star },
   { label: 'Holdings & Portfolio', view: 'portfolio', icon: Briefcase },
   { label: 'Orders & Transactions', view: 'orders', icon: History },
+  { label: 'Wallet & Deposits', view: 'wallet', icon: Wallet },
   { label: 'Market Intelligence & News', view: 'news', icon: Newspaper },
   { label: 'AI Grounded Research', view: 'research', icon: Sparkles },
 ] as const;

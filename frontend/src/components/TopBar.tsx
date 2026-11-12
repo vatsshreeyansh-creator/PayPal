@@ -6,12 +6,14 @@ interface TopBarProps {
   availableCash: string | null;
   onOpenSearch: () => void;
   onNewOrder: () => void;
+  onOpenWallet?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
   availableCash,
   onOpenSearch,
   onNewOrder,
+  onOpenWallet,
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/80 px-6 py-3">
@@ -49,11 +51,16 @@ export const TopBar: React.FC<TopBarProps> = ({
           </button>
 
           {/* Balance Badge */}
-          <div className="hidden md:flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs font-mono-nums">
+          <button
+            type="button"
+            onClick={onOpenWallet}
+            className="hidden md:flex items-center gap-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-mono-nums transition-all cursor-pointer text-left"
+            title="View Wallet & Cash Balance"
+          >
             <Wallet className="w-3.5 h-3.5 text-emerald-400" />
             <span className="text-slate-400 font-sans text-[11px]">Cash:</span>
             <span className="font-bold text-emerald-400">{availableCash === null ? 'Unavailable' : formatINR(availableCash)}</span>
-          </div>
+          </button>
 
           {/* New Order Button */}
           <button

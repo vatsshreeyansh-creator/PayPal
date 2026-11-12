@@ -31,11 +31,20 @@ from news_research_service import (ArticleContentUnavailable, ArticleNotFound, N
                                    ResearchStockNotFound, ResearchUnavailable,
                                    get_article, get_conversation, create_conversation, send_conversation_message,
                                    research_stock, search_news, summarize_article)
+from paypal_service import PayPalClient, PayPalError, get_default_paypal_client
+from wallet_service import (DepositNotFound, IdempotencyConflict as WalletIdempotencyConflict,
+                            InvalidDepositState, DepositCapturePending, DepositOrderCreationPending, CurrencyMismatch,
+                            UnresolvedDepositConflict,
+                            initiate_paypal_deposit, execute_paypal_capture, cancel_paypal_deposit,
+                            get_wallet_summary, list_wallet_history)
+from schemas import (PayPalCreateOrderRequest, PayPalCaptureOrderRequest, PayPalCancelOrderRequest,
+                     WalletSummaryResponse, WalletHistoryResponse)
 
 
 def create_app(provider: MarketDataProvider | None = None,
                news_provider: NewsProvider | None = None,
-               llm_provider: LLMProvider | None = None):
+               llm_provider: LLMProvider | None = None,
+               paypal_client: PayPalClient | None = None):
     app = Flask(__name__)
     app.config["SECRET_KEY"] = SECRET_KEY
     frontend_dist = Path(__file__).resolve().parent / "frontend" / "dist"
@@ -43,6 +52,7 @@ def create_app(provider: MarketDataProvider | None = None,
     market_data = provider or get_default_market_provider()
     news_data = news_provider or get_default_news_provider()
     llm_data = llm_provider or get_default_llm_provider()
+    paypal_data = paypal_client or get_default_paypal_client()
     initialize_database()
     with SessionLocal() as session:
         seed_instruments(session, market_data)
@@ -365,7 +375,96 @@ def create_app(provider: MarketDataProvider | None = None,
             app.logger.exception("Could not remove watchlist stock")
             return error("INTERNAL_ERROR", "The stock could not be removed.", 500)
 
+    # ---------------- Wallet & PayPal Integration Routes ----------------
+    @app.post("/api/wallet/paypal/create-order")
+    def wallet_paypal_create_order():
+        try:
+            body = json_body(PayPalCreateOrderRequest)
+        except (ValidationError, ValueError):
+            return error("VALIDATION_ERROR", "Deposit request fields are invalid.", 400)
+        try:
+            with SessionLocal() as session:
+                response = initiate_paypal_deposit(session, paypal_data, DEMO_USER_ID, body)
+            return jsonify(response.model_dump(mode="json")), 201
+        except WalletIdempotencyConflict:
+            return error("IDEMPOTENCY_CONFLICT", "The idempotency key was already used for a different deposit request.", 409, "idempotency_key")
+        except DepositOrderCreationPending as exc:
+            return error("ORDER_CREATION_PENDING", str(exc), 409)
+        except UnresolvedDepositConflict as exc:
+            return error("UNRESOLVED_DEPOSIT_CONFLICT", str(exc), 409)
+        except CurrencyMismatch:
+            return error("CURRENCY_MISMATCH", "Only USD international deposits are supported.", 400, "currency")
+        except PayPalError as exc:
+            app.logger.exception("PayPal order creation failed")
+            return error("PAYPAL_ERROR", str(exc), 503)
+        except Exception:
+            app.logger.exception("Deposit intent initiation failed")
+            return error("INTERNAL_ERROR", "The deposit could not be initiated.", 500)
+
+    @app.post("/api/wallet/paypal/capture-order")
+    def wallet_paypal_capture_order():
+        try:
+            body = json_body(PayPalCaptureOrderRequest)
+        except (ValidationError, ValueError):
+            return error("VALIDATION_ERROR", "Capture request fields are invalid.", 400)
+        try:
+            with SessionLocal() as session:
+                response, created = execute_paypal_capture(session, paypal_data, DEMO_USER_ID, body.paypal_order_id)
+            return jsonify(response.model_dump(mode="json")), 200
+        except DepositNotFound:
+            return error("DEPOSIT_NOT_FOUND", "No deposit found with the given PayPal order ID.", 404, "paypal_order_id")
+        except InvalidDepositState as exc:
+            return error("INVALID_DEPOSIT_STATE", str(exc), 422)
+        except DepositCapturePending:
+            return error("CAPTURE_PENDING", "Payment capture is currently in progress. Please retry shortly.", 409)
+        except PayPalError as exc:
+            app.logger.exception("PayPal capture failed")
+            return error("PAYPAL_ERROR", str(exc), 503)
+        except Exception:
+            app.logger.exception("Deposit capture failed")
+            return error("INTERNAL_ERROR", "The deposit capture could not be processed.", 500)
+
+    @app.post("/api/wallet/paypal/cancel-order")
+    def wallet_paypal_cancel_order():
+        try:
+            body = json_body(PayPalCancelOrderRequest)
+        except (ValidationError, ValueError):
+            return error("VALIDATION_ERROR", "Cancel request fields are invalid.", 400)
+        try:
+            with SessionLocal() as session:
+                response = cancel_paypal_deposit(session, paypal_data, DEMO_USER_ID, body.paypal_order_id)
+            return jsonify(response.model_dump(mode="json")), 200
+        except DepositNotFound:
+            return error("DEPOSIT_NOT_FOUND", "No deposit found with the given PayPal order ID.", 404, "paypal_order_id")
+        except InvalidDepositState as exc:
+            return error("INVALID_DEPOSIT_STATE", str(exc), 422)
+        except Exception:
+            app.logger.exception("Deposit cancellation failed")
+            return error("INTERNAL_ERROR", "The deposit could not be cancelled.", 500)
+
+    @app.get("/api/wallet")
+    def wallet_summary_route():
+        try:
+            with SessionLocal() as session:
+                client_mode = getattr(paypal_data, "mode", None)
+                response = get_wallet_summary(session, DEMO_USER_ID, payment_mode=client_mode)
+            return jsonify(response.model_dump(mode="json")), 200
+        except Exception:
+            app.logger.exception("Wallet summary failed")
+            return error("INTERNAL_ERROR", "The wallet summary could not be loaded.", 500)
+
+    @app.get("/api/wallet/history")
+    def wallet_history_route():
+        try:
+            with SessionLocal() as session:
+                response = list_wallet_history(session, DEMO_USER_ID)
+            return jsonify(response.model_dump(mode="json")), 200
+        except Exception:
+            app.logger.exception("Wallet history retrieval failed")
+            return error("INTERNAL_ERROR", "Wallet history could not be loaded.", 500)
+
     return app
+
 
 
 if __name__ == "__main__":

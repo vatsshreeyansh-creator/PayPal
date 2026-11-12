@@ -1,7 +1,7 @@
 """SQLAlchemy 2.x models. Quotes are intentionally not persisted."""
 from datetime import datetime
 from decimal import Decimal
-from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint, func, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -200,3 +200,50 @@ class ConversationExchangeRecord(Base):
         ForeignKey("ai_conversation_messages.id", ondelete="CASCADE"), nullable=False, unique=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class PaymentDepositRecord(Base):
+    """Persisted external wallet deposit tracking both USD payment and INR ledger settlement."""
+    __tablename__ = "payment_deposits"
+    __table_args__ = (
+        UniqueConstraint("account_id", "idempotency_key", name="uq_deposit_account_idempotency"),
+        UniqueConstraint("paypal_order_id", name="uq_deposit_paypal_order_id"),
+        UniqueConstraint("paypal_capture_id", name="uq_deposit_paypal_capture_id"),
+        CheckConstraint("payment_amount > 0", name="ck_deposit_payment_amount_positive"),
+        CheckConstraint("wallet_credit_amount IS NULL OR wallet_credit_amount > 0", name="ck_deposit_wallet_credit_positive"),
+        CheckConstraint(
+            "status IN ('INTENT_CREATED', 'CREATED', 'CAPTURE_PENDING', 'COMPLETED', 'FAILED', 'CANCELLED', 'REQUIRES_RECONCILIATION')",
+            name="ck_deposit_status",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    deposit_id: Mapped[str] = mapped_column(String(36), nullable=False, unique=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    provider: Mapped[str] = mapped_column(String(16), nullable=False, default="PAYPAL")
+    paypal_order_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    paypal_capture_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    payment_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    payment_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="USD")
+    paypal_fee_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    paypal_fee_currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    paypal_fee_in_receivable_currency: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    paypal_fee_in_receivable_currency_code: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    net_payment_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    exchange_rate: Mapped[Decimal | None] = mapped_column(Numeric(18, 6), nullable=True)
+    exchange_rate_source_currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    exchange_rate_target_currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    wallet_credit_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    wallet_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="INTENT_CREATED")
+    is_provider_confirmed_terminal: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default=text("0"))
+    approval_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    failure_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    failure_reason: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    account: Mapped[Account] = relationship()
+

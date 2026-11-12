@@ -1121,6 +1121,331 @@
           }
         }
       }
+    },
+    "/api/wallet/paypal/create-order": {
+      "post": {
+        "operationId": "createPayPalOrder",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PayPalCreateOrderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Order created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayPalCreateOrderResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Idempotent replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayPalCreateOrderResponse"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server or persistence error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency key conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PayPal unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/wallet/paypal/capture-order": {
+      "post": {
+        "operationId": "capturePayPalOrder",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PayPalCaptureOrderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Order captured and verified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayPalCaptureOrderResponse"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server or persistence error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Deposit not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid deposit state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PayPal unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/wallet/paypal/cancel-order": {
+      "post": {
+        "operationId": "cancelPayPalOrder",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PayPalCancelOrderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Order cancelled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayPalCancelOrderResponse"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server or persistence error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Deposit not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Cannot cancel deposit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/wallet": {
+      "get": {
+        "operationId": "getWalletSummary",
+        "responses": {
+          "200": {
+            "description": "Wallet summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WalletSummaryResponse"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Account not initialized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/wallet/history": {
+      "get": {
+        "operationId": "getWalletHistory",
+        "responses": {
+          "200": {
+            "description": "Wallet cash movement history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WalletHistoryResponse"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Account not initialized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2209,6 +2534,528 @@
           "created_at"
         ],
         "title": "ConversationResponse",
+        "type": "object"
+      },
+      "PayPalCreateOrderRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "string"
+          },
+          "currency": {
+            "const": "USD",
+            "default": "USD",
+            "title": "Currency",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "amount",
+          "idempotency_key"
+        ],
+        "title": "PayPalCreateOrderRequest",
+        "type": "object"
+      },
+      "PayPalCreateOrderResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "deposit_id": {
+            "title": "Deposit Id",
+            "type": "string"
+          },
+          "paypal_order_id": {
+            "title": "Paypal Order Id",
+            "type": "string"
+          },
+          "status": {
+            "const": "CREATED",
+            "title": "Status",
+            "type": "string"
+          },
+          "payment_amount": {
+            "title": "Payment Amount",
+            "type": "string"
+          },
+          "payment_currency": {
+            "const": "USD",
+            "title": "Payment Currency",
+            "type": "string"
+          },
+          "payment_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "mock",
+                  "sandbox"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Payment Mode"
+          },
+          "approval_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Approval Url"
+          }
+        },
+        "required": [
+          "deposit_id",
+          "paypal_order_id",
+          "status",
+          "payment_amount",
+          "payment_currency"
+        ],
+        "title": "PayPalCreateOrderResponse",
+        "type": "object"
+      },
+      "PayPalCaptureOrderRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "paypal_order_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Paypal Order Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "paypal_order_id"
+        ],
+        "title": "PayPalCaptureOrderRequest",
+        "type": "object"
+      },
+      "PayPalCaptureOrderResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "deposit_id": {
+            "title": "Deposit Id",
+            "type": "string"
+          },
+          "paypal_order_id": {
+            "title": "Paypal Order Id",
+            "type": "string"
+          },
+          "paypal_capture_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Paypal Capture Id"
+          },
+          "status": {
+            "enum": [
+              "COMPLETED",
+              "REQUIRES_RECONCILIATION",
+              "FAILED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "payment_amount": {
+            "title": "Payment Amount",
+            "type": "string"
+          },
+          "payment_currency": {
+            "const": "USD",
+            "title": "Payment Currency",
+            "type": "string"
+          },
+          "paypal_fee_amount": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Paypal Fee Amount"
+          },
+          "paypal_fee_currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Paypal Fee Currency"
+          },
+          "paypal_fee_in_receivable_currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Paypal Fee In Receivable Currency"
+          },
+          "paypal_fee_in_receivable_currency_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Paypal Fee In Receivable Currency Code"
+          },
+          "net_payment_amount": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Net Payment Amount"
+          },
+          "exchange_rate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Exchange Rate"
+          },
+          "exchange_rate_source_currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Exchange Rate Source Currency"
+          },
+          "exchange_rate_target_currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Exchange Rate Target Currency"
+          },
+          "wallet_credit_amount": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Wallet Credit Amount"
+          },
+          "wallet_currency": {
+            "const": "INR",
+            "default": "INR",
+            "title": "Wallet Currency",
+            "type": "string"
+          },
+          "updated_cash_balance": {
+            "title": "Updated Cash Balance",
+            "type": "string"
+          },
+          "failure_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Failure Code"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Failure Reason"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Completed At"
+          }
+        },
+        "required": [
+          "deposit_id",
+          "paypal_order_id",
+          "status",
+          "payment_amount",
+          "payment_currency",
+          "updated_cash_balance"
+        ],
+        "title": "PayPalCaptureOrderResponse",
+        "type": "object"
+      },
+      "PayPalCancelOrderRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "paypal_order_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Paypal Order Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "paypal_order_id"
+        ],
+        "title": "PayPalCancelOrderRequest",
+        "type": "object"
+      },
+      "PayPalCancelOrderResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "deposit_id": {
+            "title": "Deposit Id",
+            "type": "string"
+          },
+          "paypal_order_id": {
+            "title": "Paypal Order Id",
+            "type": "string"
+          },
+          "status": {
+            "const": "CANCELLED",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "deposit_id",
+          "paypal_order_id",
+          "status"
+        ],
+        "title": "PayPalCancelOrderResponse",
+        "type": "object"
+      },
+      "WalletSummaryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "currency": {
+            "const": "INR",
+            "default": "INR",
+            "title": "Currency",
+            "type": "string"
+          },
+          "cash_balance": {
+            "title": "Cash Balance",
+            "type": "string"
+          },
+          "total_deposited": {
+            "title": "Total Deposited",
+            "type": "string"
+          },
+          "payment_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "mock",
+                  "sandbox"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Payment Mode"
+          }
+        },
+        "required": [
+          "account_id",
+          "cash_balance",
+          "total_deposited"
+        ],
+        "title": "WalletSummaryResponse",
+        "type": "object"
+      },
+      "WalletHistoryItem": {
+        "additionalProperties": false,
+        "properties": {
+          "entry_id": {
+            "title": "Entry Id",
+            "type": "integer"
+          },
+          "entry_key": {
+            "title": "Entry Key",
+            "type": "string"
+          },
+          "category": {
+            "enum": [
+              "INITIAL_CASH",
+              "DEPOSIT",
+              "STOCK_BUY",
+              "STOCK_SELL",
+              "SUBSCRIPTION",
+              "REPORT_PURCHASE",
+              "REFUND"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "amount": {
+            "title": "Amount",
+            "type": "string"
+          },
+          "currency": {
+            "const": "INR",
+            "default": "INR",
+            "title": "Currency",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "reference_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reference Id"
+          },
+          "payment_amount": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Payment Amount"
+          },
+          "payment_currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Payment Currency"
+          },
+          "exchange_rate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Exchange Rate"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entry_id",
+          "entry_key",
+          "category",
+          "amount",
+          "description",
+          "created_at"
+        ],
+        "title": "WalletHistoryItem",
+        "type": "object"
+      },
+      "WalletHistoryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WalletHistoryItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "WalletHistoryResponse",
         "type": "object"
       }
     }
