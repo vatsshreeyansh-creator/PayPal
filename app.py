@@ -22,13 +22,15 @@ from schemas import AccountSummary, PortfolioSummary, OrderRequest, OrderRespons
 from trading_service import (IdempotencyConflict, OrderNotFound, StockNotFound as TradingStockNotFound,
                              get_order, list_orders, list_transactions, place_order)
 from news_provider import NewsProvider, get_default_news_provider
-from llm_provider import LLMProvider, get_default_llm_provider
+from llm_provider import LLMProvider, LLMProviderUnavailable, get_default_llm_provider
 from mock_research_providers import MockLLMProvider, MockNewsProvider
 from provider import MarketDataProvider
-from schemas import NewsFeedRequest, ResearchRequest
+from schemas import NewsFeedRequest, ResearchRequest, ConversationCreateRequest, ConversationMessageRequest
 from news_research_service import (ArticleContentUnavailable, ArticleNotFound, NewsUnavailable,
-                                   ResearchStockNotFound, ResearchUnavailable, get_article, research_stock, search_news,
-                                   summarize_article)
+                                   ConversationMessageIdConflict, ConversationNotFound,
+                                   ResearchStockNotFound, ResearchUnavailable,
+                                   get_article, get_conversation, create_conversation, send_conversation_message,
+                                   research_stock, search_news, summarize_article)
 
 
 def create_app(provider: MarketDataProvider | None = None,
@@ -282,6 +284,71 @@ def create_app(provider: MarketDataProvider | None = None,
         except Exception:
             app.logger.exception("Research suggestion generation failed")
             return error("INTERNAL_ERROR", "Research suggestions could not be generated.", 500)
+
+    @app.post("/api/conversations")
+    def create_ai_conversation():
+        try:
+            body = json_body(ConversationCreateRequest)
+        except (ValidationError, ValueError):
+            return error("VALIDATION_ERROR", "Conversation context fields are invalid.", 400)
+        try:
+            with SessionLocal() as session:
+                result = create_conversation(session, news_data, llm_data, market_data, DEMO_USER_ID, body)
+            return jsonify(result.model_dump(mode="json")), 201
+        except ArticleNotFound:
+            return error("ARTICLE_NOT_FOUND", "The article was not found.", 404, "article_id")
+        except ArticleContentUnavailable:
+            return error("ARTICLE_CONTENT_UNAVAILABLE", "No article text or summary is available.", 422, "article_id")
+        except ResearchStockNotFound:
+            return error("STOCK_NOT_FOUND", "No matching NSE equity was found.", 404, "symbol")
+        except NewsUnavailable:
+            return error("NEWS_PROVIDER_UNAVAILABLE", "Research evidence is temporarily unavailable.", 503)
+        except ResearchUnavailable:
+            return error("LLM_PROVIDER_UNAVAILABLE", "Research context is temporarily unavailable.", 503)
+        except Exception:
+            app.logger.exception("AI conversation creation failed")
+            return error("INTERNAL_ERROR", "The conversation could not be created.", 500)
+
+    @app.get("/api/conversations/<conversation_id>")
+    def read_ai_conversation(conversation_id):
+        try:
+            with SessionLocal() as session:
+                result = get_conversation(session, DEMO_USER_ID, conversation_id)
+            return jsonify(result.model_dump(mode="json"))
+        except ConversationNotFound:
+            return error("CONVERSATION_NOT_FOUND", "The conversation was not found.", 404, "conversation_id")
+        except Exception:
+            app.logger.exception("AI conversation retrieval failed")
+            return error("INTERNAL_ERROR", "The conversation could not be loaded.", 500)
+
+    @app.post("/api/conversations/<conversation_id>/messages")
+    def add_ai_conversation_message(conversation_id):
+        try:
+            body = json_body(ConversationMessageRequest)
+        except ValidationError as exc:
+            valid_fields = {"request_id", "content"}
+            field = next((part for issue in exc.errors()
+                          for part in issue.get("loc", ()) if part in valid_fields), None)
+            return error("VALIDATION_ERROR", "Conversation message fields are invalid.", 400, field)
+        except ValueError:
+            return error("VALIDATION_ERROR", "Conversation message must be a JSON object.", 400)
+        try:
+            with SessionLocal() as session:
+                result = send_conversation_message(
+                    session, llm_data, DEMO_USER_ID, conversation_id, str(body.request_id), body.content
+                )
+            return jsonify(result.model_dump(mode="json"))
+        except ConversationNotFound:
+            return error("CONVERSATION_NOT_FOUND", "The conversation was not found.", 404, "conversation_id")
+        except ConversationMessageIdConflict:
+            return error("MESSAGE_IDEMPOTENCY_CONFLICT",
+                         "The request ID was already used for a different message or conversation.",
+                         409, "request_id")
+        except LLMProviderUnavailable:
+            return error("LLM_PROVIDER_UNAVAILABLE", "A response could not be generated right now.", 503)
+        except Exception:
+            app.logger.exception("AI conversation message failed")
+            return error("INTERNAL_ERROR", "The message could not be processed.", 500)
 
     @app.delete("/api/watchlist/<symbol>")
     def delete_stock(symbol):

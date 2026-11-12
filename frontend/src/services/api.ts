@@ -1,5 +1,7 @@
 import type {
   AccountSummary,
+  ConversationCreateRequest,
+  ConversationResponse,
   AddWatchlistResponse,
   DeleteWatchlistResponse,
   ErrorResponse,
@@ -134,6 +136,15 @@ function isResearch(value: unknown): value is ResearchResponse {
     suggestion.informational_only === true);
 }
 
+function isConversation(value: unknown): value is ConversationResponse {
+  return isRecord(value) && isString(value.conversation_id) &&
+    (value.context_type === 'article' || value.context_type === 'research') &&
+    isString(value.context_reference) && isString(value.context_title) && isString(value.created_at) &&
+    Array.isArray(value.messages) && value.messages.every((turn) => isRecord(turn) &&
+      (turn.role === 'user' || turn.role === 'assistant') && isString(turn.content) &&
+      isNullableString(turn.provider) && isString(turn.created_at));
+}
+
 function isSearch(value: unknown): value is SearchResponse {
   return isRecord(value) && Array.isArray(value.results) && value.results.every(isStock);
 }
@@ -222,5 +233,15 @@ export const api = {
 
   getResearch: (symbol: string): Promise<ResearchResponse> =>
     request('/api/research/suggestions', isResearch, { method: 'POST', body: JSON.stringify({ symbol }) }),
+
+  createConversation: (data: ConversationCreateRequest): Promise<ConversationResponse> =>
+    request('/api/conversations', isConversation, { method: 'POST', body: JSON.stringify(data) }),
+
+  getConversation: (conversationId: string): Promise<ConversationResponse> =>
+    request(`/api/conversations/${encodeURIComponent(conversationId)}`, isConversation),
+
+  sendConversationMessage: (conversationId: string, requestId: string, content: string): Promise<ConversationResponse> =>
+    request(`/api/conversations/${encodeURIComponent(conversationId)}/messages`, isConversation,
+      { method: 'POST', body: JSON.stringify({ request_id: requestId, content }) }),
 };
 

@@ -152,3 +152,51 @@ class ArticleSummaryRecord(Base):
     negative_implications: Mapped[list[str]] = mapped_column(JSON, nullable=False)
     provider: Mapped[str] = mapped_column(String(128), nullable=False)
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class ConversationRecord(Base):
+    __tablename__ = "ai_conversations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(String(36), nullable=False, unique=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id", ondelete="CASCADE"), nullable=False)
+    context_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    context_reference: Mapped[str] = mapped_column(String(128), nullable=False)
+    context_title: Mapped[str] = mapped_column(String(512), nullable=False)
+    context_snapshot: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    messages: Mapped[list["ConversationMessageRecord"]] = relationship(
+        back_populates="conversation", cascade="all, delete-orphan", order_by="ConversationMessageRecord.id"
+    )
+
+
+class ConversationMessageRecord(Base):
+    __tablename__ = "ai_conversation_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(
+        ForeignKey("ai_conversations.conversation_id", ondelete="CASCADE"), nullable=False
+    )
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    provider: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    conversation: Mapped[ConversationRecord] = relationship(back_populates="messages")
+
+
+class ConversationExchangeRecord(Base):
+    """Idempotency ledger for one atomic user/assistant exchange."""
+    __tablename__ = "ai_conversation_exchanges"
+
+    request_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(
+        ForeignKey("ai_conversations.conversation_id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_content: Mapped[str] = mapped_column(Text, nullable=False)
+    user_message_id: Mapped[int] = mapped_column(
+        ForeignKey("ai_conversation_messages.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    assistant_message_id: Mapped[int] = mapped_column(
+        ForeignKey("ai_conversation_messages.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())

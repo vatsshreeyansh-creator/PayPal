@@ -3,7 +3,8 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 import re
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, field_validator, field_serializer
+from uuid import UUID
+from pydantic import BaseModel, ConfigDict, Field, field_validator, field_serializer, model_validator
 
 
 class ContractModel(BaseModel):
@@ -151,7 +152,7 @@ class Holding(ContractModel):
             raise ValueError("profit/loss values must use two fractional digits")
         return value
 
-    @field_validator("current_price", "market_value", "unrealized_pnl")
+    @field_validator("current_price", "market_value")
     @classmethod
     def valid_nullable_money(cls, value: str | None) -> str | None:
         if value is not None and not re.fullmatch(r"(?:0|[1-9]\d*)\.\d{2}", value):
@@ -317,6 +318,7 @@ class SummaryResponse(ContractModel):
 
 class ResearchSuggestion(ContractModel):
     symbol: str
+    provider: str
     thesis: str
     risks: list[str]
     evidence_article_ids: list[str]
@@ -348,3 +350,69 @@ class ResearchRequest(ContractModel):
         if not value:
             raise ValueError("symbol must not be empty")
         return value
+
+
+class ConversationCreateRequest(ContractModel):
+    context_type: Literal["article", "research"]
+    article_id: str | None = None
+    symbol: str | None = Field(default=None, min_length=1, max_length=32)
+    research_context: ResearchSuggestion | None = None
+
+    @field_validator("symbol")
+    @classmethod
+    def normalize_conversation_symbol(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip().upper()
+        if not value:
+            raise ValueError("symbol must not be empty")
+        return value
+
+    @model_validator(mode="after")
+    def validate_context_reference(self):
+        if self.context_type == "article" and (not self.article_id or self.symbol is not None or self.research_context is not None):
+            raise ValueError("article context requires article_id only")
+        if self.context_type == "research" and (not self.symbol or self.article_id is not None or self.research_context is None):
+            raise ValueError("research context requires symbol and research_context only")
+        if self.research_context is not None and self.research_context.symbol != self.symbol:
+            raise ValueError("research context symbol must match symbol")
+        return self
+
+
+class ConversationMessageRequest(ContractModel):
+    request_id: UUID
+    content: str = Field(min_length=1, max_length=4000)
+
+    @field_validator("content")
+    @classmethod
+    def clean_conversation_message(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("message must not be empty")
+        return value
+
+
+class ConversationTurn(ContractModel):
+    role: Literal["user", "assistant"]
+    content: str
+    provider: str | None
+    created_at: datetime
+
+    @field_serializer("created_at")
+    def serialize_turn_created_at(self, value: datetime) -> str:
+        value = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+        return value.isoformat().replace("+00:00", "Z")
+
+
+class ConversationResponse(ContractModel):
+    conversation_id: str
+    context_type: Literal["article", "research"]
+    context_reference: str
+    context_title: str
+    messages: list[ConversationTurn]
+    created_at: datetime
+
+    @field_serializer("created_at")
+    def serialize_conversation_created_at(self, value: datetime) -> str:
+        value = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+        return value.isoformat().replace("+00:00", "Z")

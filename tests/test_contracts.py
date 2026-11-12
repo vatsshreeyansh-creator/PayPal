@@ -14,15 +14,20 @@ os.environ["TRADEPOINT_DATABASE_URL"] = "sqlite:///" + DB_FILE.name.replace("\\"
 from app import create_app
 from provider import MarketDataProvider, MockMarketDataProvider, QuoteData, InstrumentData
 from news_provider import NewsProvider, NewsProviderUnavailable
-from llm_provider import LLMProvider, LLMProviderUnavailable
+from llm_provider import (ArticleInput, ConversationMessage, ConversationReply, LLMProvider,
+                          HeuristicFinancialLLMProvider, ResearchDraft, SummaryDraft,
+                          LLMProviderUnavailable)
 from schemas import Quote, OrderRequest, OrderResponse, Transaction, ErrorResponse
 from config import DEMO_USER_ID, INITIAL_CASH
 from database import SessionLocal
-from models import Account, ArticleRecord, ArticleSummaryRecord, Base, CashLedgerEntry, Holding, Instrument, Order, TransactionRecord
+from models import (Account, ArticleRecord, ArticleSummaryRecord, Base, CashLedgerEntry,
+                    ConversationExchangeRecord, ConversationMessageRecord, ConversationRecord, Holding, Instrument,
+                    Order, TransactionRecord)
 from services import seed_instruments
 from mock_research_providers import MockNewsProvider, MockLLMProvider
 from news_provider import NewsPage
-from sqlalchemy import select, create_engine
+from sqlalchemy import select, create_engine, inspect, event
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from decimal import Decimal
 
@@ -89,6 +94,331 @@ class ContractTests(unittest.TestCase):
     def test_news_and_llm_provider_protocols_are_implementable(self):
         self.assertIsInstance(MockNewsProvider(), NewsProvider)
         self.assertIsInstance(MockLLMProvider(), LLMProvider)
+
+    def test_existing_conversation_tables_gain_only_the_additive_exchange_table(self):
+        engine = create_engine("sqlite:///:memory:")
+        existing_tables = [table for table in Base.metadata.sorted_tables
+                           if table.name != "ai_conversation_exchanges"]
+        Base.metadata.create_all(engine, tables=existing_tables)
+        before = {name: {column["name"] for column in inspect(engine).get_columns(name)}
+                  for name in ("ai_conversations", "ai_conversation_messages")}
+
+        Base.metadata.create_all(engine)
+        after = {name: {column["name"] for column in inspect(engine).get_columns(name)}
+                 for name in before}
+        self.assertEqual(after, before)
+        self.assertIn("ai_conversation_exchanges", inspect(engine).get_table_names())
+        Base.metadata.create_all(engine)
+        engine.dispose()
+
+    def test_article_conversation_retains_context_and_full_turn_history(self):
+        class EchoHistoryLLM(MockLLMProvider):
+            def converse(self, *, system_instructions, context, messages):
+                users = [message.content for message in messages if message.role == "user"]
+                return ConversationReply(f"Context included: {'TCS' in context}. Earlier question: {users[-2] if len(users) > 1 else 'none'}", self.provider_name)
+
+        client = create_app(news_provider=MockNewsProvider(), llm_provider=EchoHistoryLLM()).test_client()
+        feed = client.get("/api/news?scope=market").get_json()
+        article_id = feed["articles"][0]["article_id"] if isinstance(feed, list) else feed["articles"][0]["article_id"]
+        created = client.post("/api/conversations", json={"context_type": "article", "article_id": article_id})
+        self.assertEqual(created.status_code, 201, created.get_json())
+        conversation_id = created.get_json()["conversation_id"]
+        first = client.post(f"/api/conversations/{conversation_id}/messages", json={
+            "request_id": "00000000-0000-4000-8000-000000000001", "content": "Why did margins decline?"})
+        self.assertEqual(first.status_code, 200, first.get_json())
+        second = client.post(f"/api/conversations/{conversation_id}/messages", json={
+            "request_id": "00000000-0000-4000-8000-000000000002", "content": "Is that serious?"})
+        self.assertEqual(second.status_code, 200, second.get_json())
+        body = second.get_json()
+        self.assertEqual([turn["role"] for turn in body["messages"]], ["user", "assistant", "user", "assistant"])
+        self.assertIn("Why did margins decline?", body["messages"][-1]["content"])
+        self.assertEqual(client.get(f"/api/conversations/{conversation_id}").get_json(), body)
+        with SessionLocal() as session:
+            record = session.scalar(select(ConversationRecord).where(ConversationRecord.conversation_id == conversation_id))
+            self.assertIn(article_id, record.context_snapshot)
+            self.assertEqual(session.query(ConversationMessageRecord).filter_by(conversation_id=conversation_id).count(), 4)
+
+    def test_research_conversation_creation_pins_stock_report_context(self):
+        client = create_app(news_provider=MockNewsProvider(), llm_provider=MockLLMProvider()).test_client()
+        research_context = {"symbol": "TCS", "provider": "mock-llm",
+            "thesis": "The cited news supports no directional conclusion.",
+            "risks": ["Coverage is limited."], "evidence_article_ids": [],
+            "generated_at": "2026-11-11T00:00:00Z", "reported_facts": [],
+            "positive_implications": [], "negative_implications": [],
+            "uncertainty": "High", "informational_only": True}
+        response = client.post("/api/conversations", json={"context_type": "research", "symbol": "TCS",
+            "article_id": None, "research_context": research_context})
+        self.assertEqual(response.status_code, 201, response.get_json())
+        body = response.get_json()
+        self.assertEqual(body["context_type"], "research")
+        self.assertEqual(body["context_reference"], "TCS")
+        with SessionLocal() as session:
+            record = session.scalar(select(ConversationRecord).where(ConversationRecord.conversation_id == body["conversation_id"]))
+            self.assertIn('"report"', record.context_snapshot)
+            self.assertIn(research_context["thesis"], record.context_snapshot)
+
+    def test_failed_conversation_generation_does_not_persist_orphan_user_turn(self):
+        class FailingConversationLLM(MockLLMProvider):
+            fail = True
+
+            def converse(self, **kwargs):
+                if self.fail:
+                    raise LLMProviderUnavailable("offline")
+                return ConversationReply("Recovered response.", self.provider_name)
+
+        llm = FailingConversationLLM()
+        client = create_app(news_provider=MockNewsProvider(), llm_provider=llm).test_client()
+        feed = client.get("/api/news?scope=market").get_json()
+        article_id = feed["articles"][0]["article_id"]
+        created = client.post("/api/conversations", json={"context_type": "article", "article_id": article_id,
+            "symbol": None, "research_context": None})
+        conversation_id = created.get_json()["conversation_id"]
+        message = {"request_id": "00000000-0000-4000-8000-000000000003", "content": "Follow up?"}
+        response = client.post(f"/api/conversations/{conversation_id}/messages", json=message)
+        self.assertEqual(response.status_code, 503)
+        history = client.get(f"/api/conversations/{conversation_id}").get_json()
+        self.assertEqual(history["messages"], [])
+        llm.fail = False
+        retry = client.post(f"/api/conversations/{conversation_id}/messages", json=message)
+        self.assertEqual(retry.status_code, 200)
+        self.assertEqual([turn["role"] for turn in retry.get_json()["messages"]], ["user", "assistant"])
+
+    def test_conversation_message_request_id_replay_and_conflicts(self):
+        class CountingLLM(MockLLMProvider):
+            calls = 0
+
+            def converse(self, **kwargs):
+                self.calls += 1
+                return super().converse(**kwargs)
+
+        llm = CountingLLM()
+        client = create_app(news_provider=MockNewsProvider(), llm_provider=llm).test_client()
+        feed = client.get("/api/news?scope=market").get_json()
+        article_id = feed["articles"][0]["article_id"]
+        conversation_id = client.post("/api/conversations", json={
+            "context_type": "article", "article_id": article_id}).get_json()["conversation_id"]
+        second_conversation_id = client.post("/api/conversations", json={
+            "context_type": "article", "article_id": article_id}).get_json()["conversation_id"]
+        message = {"request_id": "00000000-0000-4000-8000-000000000004", "content": "What changed?"}
+
+        first = client.post(f"/api/conversations/{conversation_id}/messages", json=message)
+        self.assertEqual(first.status_code, 200)
+        replay = client.post(f"/api/conversations/{conversation_id}/messages", json=message)
+        self.assertEqual(replay.status_code, 200)
+        self.assertEqual(replay.get_json(), first.get_json())
+        self.assertEqual(llm.calls, 1)
+        with SessionLocal() as session:
+            self.assertEqual(session.query(ConversationMessageRecord).filter_by(conversation_id=conversation_id).count(), 2)
+            self.assertEqual(session.query(ConversationExchangeRecord).filter_by(request_id=message["request_id"]).count(), 1)
+
+        reused_content = client.post(f"/api/conversations/{conversation_id}/messages", json={
+            **message, "content": "A different question"})
+        reused_conversation = client.post(f"/api/conversations/{second_conversation_id}/messages", json=message)
+        for conflict in (reused_content, reused_conversation):
+            self.assertEqual(conflict.status_code, 409)
+            self.assertEqual(conflict.get_json()["error"]["code"], "MESSAGE_IDEMPOTENCY_CONFLICT")
+
+    def test_concurrent_messages_are_serialized_against_latest_history(self):
+        from threading import Event, Lock, get_ident
+        from concurrent.futures import ThreadPoolExecutor
+
+        entered_provider = Event()
+        release_provider = Event()
+        second_request_thread_ready = Event()
+        second_begin_attempted = Event()
+        calls_lock = Lock()
+        provider_transcripts = []
+        second_thread_id = None
+
+        class SlowHistoryLLM(MockLLMProvider):
+            def converse(self, *, system_instructions, context, messages):
+                with calls_lock:
+                    provider_transcripts.append(list(messages))
+                    call_number = len(provider_transcripts)
+                if call_number == 1:
+                    entered_provider.set()
+                    if not release_provider.wait(5):
+                        raise RuntimeError("test synchronization timed out")
+                return ConversationReply(f"Answer to {messages[-1].content}", self.provider_name)
+
+        app = create_app(news_provider=MockNewsProvider(), llm_provider=SlowHistoryLLM())
+        client = app.test_client()
+        feed = client.get("/api/news?scope=market").get_json()
+        article_id = feed["articles"][0]["article_id"]
+        conversation_id = client.post("/api/conversations", json={
+            "context_type": "article", "article_id": article_id}).get_json()["conversation_id"]
+        payloads = [
+            {"request_id": "00000000-0000-4000-8000-000000000005", "content": "Question one?"},
+            {"request_id": "00000000-0000-4000-8000-000000000006", "content": "Question two?"},
+        ]
+
+        with SessionLocal() as session:
+            engine = session.get_bind()
+
+        def observe_second_begin(_connection, _cursor, statement, _parameters, _context, _many):
+            if (statement.strip().upper() == "BEGIN IMMEDIATE"
+                    and get_ident() == second_thread_id):
+                second_begin_attempted.set()
+
+        event.listen(engine, "before_cursor_execute", observe_second_begin)
+
+        def post(index):
+            if index == 1:
+                nonlocal second_thread_id
+                second_thread_id = get_ident()
+                second_request_thread_ready.set()
+            with app.test_client() as request_client:
+                return request_client.post(f"/api/conversations/{conversation_id}/messages", json=payloads[index])
+
+        try:
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                first_future = pool.submit(post, 0)
+                self.assertTrue(entered_provider.wait(3), "first request did not reach its provider")
+                second_future = pool.submit(post, 1)
+                self.assertTrue(second_request_thread_ready.wait(3), "second request thread did not start")
+                self.assertTrue(second_begin_attempted.wait(3), "second request did not attempt BEGIN IMMEDIATE")
+
+                # The provider is still blocked, so the first request must still own
+                # SQLite's reservation. A zero-timeout independent writer probes that
+                # the database is genuinely contended before we release the provider.
+                with engine.connect() as probe:
+                    probe.exec_driver_sql("PRAGMA busy_timeout=0")
+                    with self.assertRaises(OperationalError):
+                        probe.exec_driver_sql("BEGIN IMMEDIATE")
+
+                release_provider.set()
+                first_response = first_future.result(timeout=10)
+                second_response = second_future.result(timeout=10)
+        finally:
+            release_provider.set()
+            event.remove(engine, "before_cursor_execute", observe_second_begin)
+
+        self.assertEqual(first_response.status_code, 200, first_response.get_json())
+        self.assertEqual(second_response.status_code, 200, second_response.get_json())
+        self.assertEqual(len(provider_transcripts), 2)
+        self.assertEqual([turn.content for turn in provider_transcripts[1]], [
+            "Question one?", "Answer to Question one?", "Question two?",
+        ])
+        final_turns = second_response.get_json()["messages"]
+        self.assertEqual([turn["content"] for turn in final_turns], [
+            "Question one?", "Answer to Question one?", "Question two?", "Answer to Question two?",
+        ])
+
+        with SessionLocal() as session:
+            self.assertEqual(session.query(ConversationMessageRecord).filter_by(
+                conversation_id=conversation_id).count(), 4)
+            self.assertEqual(session.query(ConversationExchangeRecord).filter_by(
+                conversation_id=conversation_id).count(), 2)
+
+    def test_concurrent_same_conversation_request_id_is_processed_once(self):
+        from threading import Event, Lock, get_ident
+        from concurrent.futures import ThreadPoolExecutor
+
+        entered_provider = Event()
+        release_provider = Event()
+        second_request_thread_ready = Event()
+        second_begin_attempted = Event()
+        calls_lock = Lock()
+        second_thread_id = None
+
+        class CountingSlowLLM(MockLLMProvider):
+            calls = 0
+
+            def converse(self, *, system_instructions, context, messages):
+                with calls_lock:
+                    self.calls += 1
+                entered_provider.set()
+                if not release_provider.wait(5):
+                    raise RuntimeError("test synchronization timed out")
+                return ConversationReply("Only one generated answer.", self.provider_name)
+
+        llm = CountingSlowLLM()
+        app = create_app(news_provider=MockNewsProvider(), llm_provider=llm)
+        client = app.test_client()
+        article_id = client.get("/api/news?scope=market").get_json()["articles"][0]["article_id"]
+        conversation_id = client.post("/api/conversations", json={
+            "context_type": "article", "article_id": article_id}).get_json()["conversation_id"]
+        payload = {"request_id": "00000000-0000-4000-8000-000000000007", "content": "Same question?"}
+
+        with SessionLocal() as session:
+            engine = session.get_bind()
+
+        def observe_second_begin(_connection, _cursor, statement, _parameters, _context, _many):
+            if (statement.strip().upper() == "BEGIN IMMEDIATE"
+                    and get_ident() == second_thread_id):
+                second_begin_attempted.set()
+
+        event.listen(engine, "before_cursor_execute", observe_second_begin)
+
+        def post(is_second):
+            if is_second:
+                nonlocal second_thread_id
+                second_thread_id = get_ident()
+                second_request_thread_ready.set()
+            with app.test_client() as request_client:
+                return request_client.post(f"/api/conversations/{conversation_id}/messages", json=payload)
+
+        try:
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                first_future = pool.submit(post, False)
+                self.assertTrue(entered_provider.wait(3), "first request did not reach its provider")
+                second_future = pool.submit(post, True)
+                self.assertTrue(second_request_thread_ready.wait(3), "second request thread did not start")
+                self.assertTrue(second_begin_attempted.wait(3), "second request did not attempt BEGIN IMMEDIATE")
+
+                with engine.connect() as probe:
+                    probe.exec_driver_sql("PRAGMA busy_timeout=0")
+                    with self.assertRaises(OperationalError):
+                        probe.exec_driver_sql("BEGIN IMMEDIATE")
+
+                release_provider.set()
+                responses = [first_future.result(timeout=10), second_future.result(timeout=10)]
+        finally:
+            release_provider.set()
+            event.remove(engine, "before_cursor_execute", observe_second_begin)
+
+        self.assertEqual([response.status_code for response in responses], [200, 200])
+        self.assertEqual(llm.calls, 1)
+        self.assertEqual(responses[0].get_json(), responses[1].get_json())
+        messages = responses[0].get_json()["messages"]
+        self.assertEqual([message["role"] for message in messages], ["user", "assistant"])
+        self.assertEqual([message["content"] for message in messages], [
+            "Same question?", "Only one generated answer.",
+        ])
+        with SessionLocal() as session:
+            self.assertEqual(session.query(ConversationExchangeRecord).filter_by(
+                request_id=payload["request_id"]).count(), 1)
+            self.assertEqual(session.query(ConversationMessageRecord).filter_by(
+                conversation_id=conversation_id).count(), 2)
+
+    def test_conversation_validation_and_unknown_ids_use_standard_errors(self):
+        invalid = self.client.post("/api/conversations", json={"context_type": "article", "symbol": "TCS"})
+        self.assertEqual(invalid.status_code, 400)
+        missing = self.client.get("/api/conversations/no-such-conversation")
+        self.assertEqual(missing.status_code, 404)
+        self.assertEqual(missing.get_json()["error"]["code"], "CONVERSATION_NOT_FOUND")
+        valid_id = self.client.get("/api/news?scope=market").get_json()["articles"][0]["article_id"]
+        conversation_id = self.client.post("/api/conversations", json={
+            "context_type": "article", "article_id": valid_id}).get_json()["conversation_id"]
+        missing_request_id = self.client.post(f"/api/conversations/{conversation_id}/messages", json={"content": "Question"})
+        self.assertEqual(missing_request_id.status_code, 400)
+        self.assertEqual(missing_request_id.get_json()["error"]["code"], "VALIDATION_ERROR")
+        self.assertEqual(missing_request_id.get_json()["error"]["field"], "request_id")
+
+        invalid_request_id = self.client.post(f"/api/conversations/{conversation_id}/messages", json={
+            "request_id": "not-a-uuid", "content": "Question"})
+        self.assertEqual(invalid_request_id.status_code, 400)
+        self.assertEqual(invalid_request_id.get_json()["error"]["field"], "request_id")
+
+        invalid_content = self.client.post(f"/api/conversations/{conversation_id}/messages", json={
+            "request_id": "00000000-0000-4000-8000-000000000008", "content": ""})
+        self.assertEqual(invalid_content.status_code, 400)
+        self.assertEqual(invalid_content.get_json()["error"]["field"], "content")
+
+        missing_content = self.client.post(f"/api/conversations/{conversation_id}/messages", json={
+            "request_id": "00000000-0000-4000-8000-000000000009"})
+        self.assertEqual(missing_content.status_code, 400)
+        self.assertEqual(missing_content.get_json()["error"]["field"], "content")
 
     def test_money_and_order_models_reject_incompatible_representations(self):
         Quote(price="123.40", as_of=datetime.now(timezone.utc), simulated=True)
@@ -416,6 +746,7 @@ class ContractTests(unittest.TestCase):
         response = self.client.post(f"/api/news/{article_id}/summary")
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
+        self.assertEqual(data["provider"], "mock-llm")
         self.assertTrue(data["reported_facts"])
         self.assertTrue(data["positive_implications"])
         self.assertTrue(data["negative_implications"])
@@ -428,9 +759,97 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         suggestion = response.get_json()["suggestions"][0]
         self.assertEqual(suggestion["symbol"], "TCS")
+        self.assertEqual(suggestion["provider"], "mock-llm")
         self.assertTrue(suggestion["evidence_article_ids"])
         self.assertTrue(suggestion["uncertainty"])
         self.assertTrue(response.get_json()["disclaimer"])
+
+    def test_summary_research_and_conversation_share_provider_and_report_actual_name(self):
+        class NamedLLM:
+            provider_name = "integration-genuine-test"
+
+            def summarize_article(self, article: ArticleInput) -> SummaryDraft:
+                return SummaryDraft("Summary", ["Development"], ["Fact"], ["Upside"], ["Risk"])
+
+            def research_stock(self, *, symbol, current_price, evidence) -> ResearchDraft:
+                return ResearchDraft("Thesis", ["Risk"], ["Fact"], ["Upside"], ["Downside"], "Limited evidence")
+
+            def converse(self, *, system_instructions, context, messages) -> ConversationReply:
+                return ConversationReply("The report supports that interpretation with uncertainty.", self.provider_name)
+
+        llm = NamedLLM()
+        client = create_app(provider=MockMarketDataProvider(), news_provider=MockNewsProvider(),
+                            llm_provider=llm).test_client()
+        article_id = client.get("/api/news?scope=market").get_json()["articles"][0]["article_id"]
+        summary = client.post(f"/api/news/{article_id}/summary")
+        research = client.post("/api/research/suggestions", json={"symbol": "TCS"})
+        conversation = client.post("/api/conversations", json={
+            "context_type": "article", "article_id": article_id}).get_json()
+        turn = client.post(f"/api/conversations/{conversation['conversation_id']}/messages", json={
+            "request_id": "00000000-0000-4000-8000-000000000101", "content": "Explain the risk."})
+
+        self.assertEqual(summary.status_code, 200, summary.get_json())
+        self.assertEqual(research.status_code, 200, research.get_json())
+        self.assertEqual(summary.get_json()["provider"], llm.provider_name)
+        self.assertEqual(research.get_json()["suggestions"][0]["provider"], llm.provider_name)
+        self.assertEqual(turn.status_code, 200, turn.get_json())
+        self.assertEqual(turn.get_json()["messages"][-1]["provider"], llm.provider_name)
+
+    def test_summary_cache_is_replaced_when_it_came_from_a_different_provider(self):
+        self.reset_news_state()
+        news_provider = MockNewsProvider()
+        first_client = create_app(news_provider=news_provider, llm_provider=MockLLMProvider()).test_client()
+        article_id = first_client.get("/api/news?scope=market").get_json()["articles"][0]["article_id"]
+        first = first_client.post(f"/api/news/{article_id}/summary")
+        self.assertEqual(first.get_json()["provider"], "mock-llm")
+
+        class NamedLLM(MockLLMProvider):
+            provider_name = "groq/openai/gpt-oss-20b"
+
+            def summarize_article(self, article):
+                return SummaryDraft("Fresh genuine-provider summary", [], ["Fresh fact"], [], [])
+
+        second_client = create_app(news_provider=news_provider, llm_provider=NamedLLM()).test_client()
+        second = second_client.post(f"/api/news/{article_id}/summary")
+        self.assertEqual(second.status_code, 200, second.get_json())
+        self.assertEqual(second.get_json()["provider"], "groq/openai/gpt-oss-20b")
+        self.assertEqual(second.get_json()["summary"], "Fresh genuine-provider summary")
+
+    def test_offline_conversation_providers_do_not_echo_internal_article_metadata(self):
+        context = json.dumps({"kind": "article", "article_id": "internal-article-id",
+            "title": "TCS reports margin pressure", "source": "Private source label",
+            "url": "https://example.test/internal", "content": "Operating margins fell as integration costs increased."})
+        messages = [ConversationMessage("user", "Why did margins fall?")]
+        for llm in (MockLLMProvider(), HeuristicFinancialLLMProvider()):
+            with self.subTest(provider=llm.provider_name):
+                reply = llm.converse(system_instructions="Be careful", context=context, messages=messages)
+                self.assertNotIn("internal-article-id", reply.content)
+                self.assertNotIn("Private source label", reply.content)
+                self.assertNotIn("https://example.test/internal", reply.content)
+                self.assertIn("integration costs", reply.content)
+
+    def test_llm_unavailability_is_an_error_for_summary_research_and_conversation(self):
+        class UnavailableLLM(MockLLMProvider):
+            def summarize_article(self, article):
+                raise LLMProviderUnavailable("provider unavailable")
+
+            def research_stock(self, **kwargs):
+                raise LLMProviderUnavailable("provider unavailable")
+
+            def converse(self, **kwargs):
+                raise LLMProviderUnavailable("provider unavailable")
+
+        client = create_app(news_provider=MockNewsProvider(), llm_provider=UnavailableLLM()).test_client()
+        article_id = client.get("/api/news?scope=market").get_json()["articles"][0]["article_id"]
+        summary = client.post(f"/api/news/{article_id}/summary")
+        research = client.post("/api/research/suggestions", json={"symbol": "TCS"})
+        conversation = client.post("/api/conversations", json={
+            "context_type": "article", "article_id": article_id}).get_json()
+        message = client.post(f"/api/conversations/{conversation['conversation_id']}/messages", json={
+            "request_id": "00000000-0000-4000-8000-000000000102", "content": "Follow up?"})
+        for response in (summary, research, message):
+            self.assertEqual(response.status_code, 503, response.get_json())
+            self.assertIn("LLM_PROVIDER_UNAVAILABLE", response.get_json()["error"]["code"])
 
     def test_news_llm_failures_and_unknown_article_use_standard_errors(self):
         self.reset_news_state()

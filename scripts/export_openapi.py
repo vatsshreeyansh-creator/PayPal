@@ -8,12 +8,15 @@ from schemas import (AddWatchlistRequest, AddWatchlistResponse, DeleteWatchlistR
                      ErrorResponse, GetWatchlistResponse, SearchRequest, SearchResponse,
                      AccountSummary, Holding, PortfolioSummary, OrderRequest, OrderResponse,
                      Transaction, NewsArticle, NewsSearchResponse, NewsFeedRequest,
-                     SummaryResponse, ResearchSuggestion, ResearchResponse, ResearchRequest)
+                     SummaryResponse, ResearchSuggestion, ResearchResponse, ResearchRequest,
+                     ConversationCreateRequest, ConversationMessageRequest,
+                     ConversationTurn, ConversationResponse)
 
 MODELS = [AddWatchlistRequest, AddWatchlistResponse, DeleteWatchlistResponse, ErrorResponse,
           GetWatchlistResponse, SearchRequest, SearchResponse, AccountSummary, Holding,
           PortfolioSummary, OrderRequest, OrderResponse, Transaction, NewsArticle,
           NewsSearchResponse, NewsFeedRequest, SummaryResponse, ResearchSuggestion, ResearchResponse, ResearchRequest]
+MODELS += [ConversationCreateRequest, ConversationMessageRequest, ConversationTurn, ConversationResponse]
 
 
 def make_spec():
@@ -92,6 +95,23 @@ def make_spec():
             "requestBody": {"required": True, "content": json_content("ResearchRequest")},
             "responses": responses({"200": {"description": "Research suggestions", "content": json_content("ResearchResponse")}},
                                    [(400, "Invalid request"), (404, "Unknown stock"), (503, "News or LLM provider unavailable")])}}
+        ,"/api/conversations": {"post": {
+            "operationId": "createConversation",
+            "requestBody": {"required": True, "content": json_content("ConversationCreateRequest")},
+            "responses": responses({"201": {"description": "Conversation created with pinned context", "content": json_content("ConversationResponse")}},
+                                   [(400, "Invalid context"), (404, "Article or stock not found"), (422, "Article content unavailable"), (503, "News or LLM unavailable")])}},
+        "/api/conversations/{conversation_id}": {"get": {
+            "operationId": "getConversation",
+            "parameters": [{"name": "conversation_id", "in": "path", "required": True, "schema": {"type": "string"}}],
+            "responses": responses({"200": {"description": "Conversation history", "content": json_content("ConversationResponse")}},
+                                   [(404, "Conversation not found")])}},
+        "/api/conversations/{conversation_id}/messages": {"post": {
+            "operationId": "addConversationMessage",
+            "parameters": [{"name": "conversation_id", "in": "path", "required": True, "schema": {"type": "string"}}],
+            "requestBody": {"required": True, "content": json_content("ConversationMessageRequest")},
+            "responses": responses({"200": {"description": "Conversation including the new user and assistant turns", "content": json_content("ConversationResponse")}},
+                                   [(400, "Invalid message"), (404, "Conversation not found"),
+                                    (409, "Message request ID conflict"), (503, "LLM unavailable")])}}
     })
     return {"openapi": "3.1.0", "info": {"title": "TradePoint API", "version": "0.1.0"},
             "paths": paths, "components": {"schemas": components}}

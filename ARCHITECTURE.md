@@ -12,7 +12,7 @@ The repository is a compact Flask modular backend with a React/Vite frontend:
 | `services.py` | Search/cache, watchlist add/list/delete, quote mapping. |
 | `portfolio_service.py` | Demo-account initialization/read and read-only holdings/portfolio valuation. |
 | `trading_service.py` | Idempotent simulated orders, atomic account/holding/cash-ledger updates, and transaction reads. |
-| `news_research_service.py` | News pagination/persistence/deduplication, article retrieval, cached summaries, research orchestration. |
+| `news_research_service.py` | News pagination/persistence/deduplication, article retrieval, cached summaries, research and contextual conversation orchestration. |
 | `news_provider.py`, `llm_provider.py` | Normalized provider Protocols; deterministic local mocks are in `mock_research_providers.py`. |
 | `provider.py` | `MarketDataProvider`, normalized `InstrumentData`/`QuoteData`, mock market data, `ProviderUnavailable`. |
 | `schemas.py` | Pydantic request/response validation. |
@@ -23,7 +23,7 @@ The repository is a compact Flask modular backend with a React/Vite frontend:
 | `CONTRACTS.md` | Current API and component contracts. |
 | `README.md`, `requirements.txt` | Run and dependency instructions. |
 
-The implementation is a single-user demo with persistent SQLite storage and mock market/news/LLM providers. Account, holdings, watchlist, paper trading, orders, transactions, news, summaries, and research APIs are implemented. Production external providers, authentication, and historical market-price APIs are not implemented.
+The implementation is a single-user demo with persistent SQLite storage and configurable market/news/LLM providers. Account, holdings, watchlist, paper trading, orders, transactions, news, summaries, research, and persistent context-pinned AI conversations are implemented. Authentication and historical market-price APIs are not implemented.
 
 ## 2. Recommended architecture: keep the modular monolith
 
@@ -75,6 +75,7 @@ Keep existing `instruments` and `watchlist_entries` as specified in `CONTRACTS.m
 | `transactions` | **Implemented.** Immutable completed fill facts: unique order, instrument, side, quantity, price, gross amount, timestamp. Rejected orders have no transaction. |
 | `news_articles` | **Implemented.** Normalized article metadata/content with unique canonical URL and unique `(source, provider_article_id)`. Symbols are stored as JSON. |
 | `article_summaries` | **Implemented.** One structured cached AI summary per article. |
+| `ai_conversations`, `ai_conversation_messages`, `ai_conversation_exchanges` | **Implemented.** Pinned context, ordered persisted turns, provider metadata, and globally unique request IDs for idempotent exchanges. These are additive tables created by `create_all()`. |
 | `holdings` | **Implemented foundation.** Account/instrument, positive whole-share quantity, average purchase price, realized P/L. No trading service mutates it yet. When trading is implemented, define transactions as source of truth and holdings as a transactionally updated projection. |
 | `watchlist_entries` | Existing membership table; do not infer ownership from membership. |
 
@@ -83,6 +84,8 @@ Use `Decimal` in Python and SQL `NUMERIC` for money and share quantities; never 
 ### Trading transaction boundary
 
 A simulated market/limit execution must be one SQLAlchemy transaction: validate request and idempotency key; read account/cash and holding state; validate sufficient cash/quantity; create/transition order; create trade/fill; append cash ledger; update holding projection if used; commit. On any failure, roll back all writes. Repeated idempotency keys return the original result and must not execute twice. SQLite concurrency should be treated carefully; use an explicit write transaction/locking strategy or serialize writes in the application. The exact approach should be proven under concurrent requests before multi-user use.
+
+Conversation message writes reserve SQLite's writer before transcript reads (`BEGIN IMMEDIATE`), call the LLM while holding that reservation, and atomically save both messages plus a `ai_conversation_exchanges` idempotency row. A UUID request ID is globally unique. Replays with the same conversation and content return the stored conversation without another generation; reuse with different content or conversation is a 409 conflict. SQLite's 45-second busy timeout also applies to competing writers, so long provider requests can delay unrelated writes.
 
 ## 5. API growth rules
 
@@ -124,7 +127,7 @@ The original source brief was truncated after “Trading will initially use simu
 
 `npm run contracts:types` regenerates `openapi.json` and `static/api-types.d.ts` intentionally. Do not hand-edit generated files. `npm run check` compares committed generated artifacts with fresh output without writing them, then runs Python contract tests. CI also installs the frontend lockfile, builds React, runs frontend API fixture tests and lint, and smoke-tests Flask serving the production assets. React API types are imported from the generated OpenAPI declaration; the runtime API client validates response shapes before returning them.
 
-Normalized integration seams are `MarketDataProvider` in `provider.py`, `NewsProvider` in `news_provider.py`, and `LLMProvider` in `llm_provider.py`. Application services are explicit module-level functions (`services.py`, `portfolio_service.py`, `trading_service.py`, and `news_research_service.py`), called directly by Flask routes with dependencies passed as arguments. Deterministic mock providers and backend orchestration are implemented. React is the primary frontend; production external provider adapters remain out of scope.
+Normalized integration seams are `MarketDataProvider` in `provider.py`, `NewsProvider` in `news_provider.py`, and `LLMProvider` in `llm_provider.py`. Application services are explicit module-level functions (`services.py`, `portfolio_service.py`, `trading_service.py`, and `news_research_service.py`), called directly by Flask routes with dependencies passed as arguments. Deterministic mock providers and backend orchestration are implemented. Groq, Hugging Face, and Ollama LLM adapters are present; the runtime selects Groq by default outside tests. React is the primary frontend.
 
 ## 8. Remaining decisions
 
@@ -132,9 +135,9 @@ Normalized integration seams are `MarketDataProvider` in `provider.py`, `NewsPro
 2. Confirm the starting cash amount and development reset mechanism; this plan assumes INR 1,000,000.00 and no API for funding.
 3. The current simulated execution accepts any available quote, including live-provider quotes, while keeping all orders and transactions in TradePoint's paper ledger. Define acceptable quote age once there is more than one provider.
 4. Select news source(s), licensing/retention rules, and article text availability before implementing NewsProvider.
-5. Select LLM provider/model, privacy/retention policy, token budget and safety constraints before implementing LLMProvider.
+5. Configure an LLM provider/model, privacy/retention policy, token budget and safety constraints before deployment. The current Flask runtime defaults to Groq outside tests; `.env.local` is loaded for local development and deployment hosts provide credentials through server-side environment configuration.
 6. Define the required human review/disclaimer behavior and allowed scope of AI suggestions before exposing research endpoints.
-7. SQLite deployment/concurrency scope is one local process only. Choose a server database before supporting multiple app workers or users.
+7. SQLite remains the MVP database. Conversation turns use SQLite's cross-process writer reservation; this serializes all writes during LLM generation and is suitable only for the current low-volume demo. Measure contention before supporting broader multi-user traffic or moving to a server database.
 
 ## 9. Integration contract workflow
 
@@ -180,7 +183,7 @@ Avoid assigning different owners to `app.py`, `schemas.py`, and `models.py` in t
 
 ## 13. Current implementation status
 
-The watchlist, account/portfolio, simulated trading, news/article, mock summary, and research APIs are implemented. The React frontend consumes those APIs; historical charting remains unavailable. The Markets view uses stock search and watchlist quote data. The order ticket is embedded in the dashboard and quick-order modal. Flask unconditionally serves the React production build; the Vite development server proxies API calls to Flask. Production provider adapters are documented in provider modules.
+The watchlist, account/portfolio, simulated trading, news/article, summaries, research, and context-pinned multi-turn conversation APIs are implemented. The React frontend consumes those APIs; historical charting remains unavailable. The Markets view uses stock search and watchlist quote data. The order ticket is embedded in the dashboard and quick-order modal. Flask unconditionally serves the React production build; the Vite development server proxies API calls to Flask. Production provider adapters are documented in provider modules.
 
 ## 14. Ready-to-use developer task briefs
 

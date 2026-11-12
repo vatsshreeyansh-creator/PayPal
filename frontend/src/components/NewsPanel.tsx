@@ -3,6 +3,7 @@ import { Newspaper, Sparkles, ExternalLink, ChevronDown, ChevronUp, Loader2, Fil
 import type { NewsArticle, NewsSearchResponse, SummaryResponse } from '../types/api';
 import { formatRelativeTime } from '../utils/format';
 import { api } from '../services/api';
+import { ConversationPanel } from './ConversationPanel';
 
 interface NewsPanelProps {
   news: NewsSearchResponse | null;
@@ -87,7 +88,8 @@ export const NewsPanel: React.FC<NewsPanelProps> = ({ news, loading, error, scop
       {expandedSummary === item.article_id && <div className="mt-3 p-3 bg-slate-900 border border-indigo-500/20 rounded-xl text-xs text-slate-300 space-y-2" aria-live="polite">
         {summary?.loading && <span>Generating summary…</span>}
         {summary?.error && <span role="alert" className="text-rose-300">{summary.error}</span>}
-        {summary?.data && <><p><strong>Summary:</strong> {summary.data.summary}</p><SummaryList title="Key developments" values={summary.data.key_developments} /><SummaryList title="Reported facts" values={summary.data.reported_facts} /><SummaryList title="Positive implications" values={summary.data.positive_implications} /><SummaryList title="Negative implications / risks" values={summary.data.negative_implications} /><p className="text-slate-400"><strong>Disclaimer:</strong> {summary.data.disclaimer}</p></>}
+        {summary?.data && <><p className="text-[10px] text-slate-500">Provider: {summary.data.provider}</p><p><strong>Summary:</strong> {summary.data.summary}</p><SummaryList title="Key developments" values={summary.data.key_developments} /><SummaryList title="Reported facts" values={summary.data.reported_facts} /><SummaryList title="Positive implications" values={summary.data.positive_implications} /><SummaryList title="Negative implications / risks" values={summary.data.negative_implications} /><p className="text-slate-400"><strong>Disclaimer:</strong> {summary.data.disclaimer}</p></>}
+        {summary?.data && <ConversationPanel key={item.article_id} context={{ context_type: 'article', article_id: item.article_id, symbol: null, research_context: null }} />}
       </div>}
     </article>)}</div>
     {news?.next_page_token && <button onClick={() => { const token = news?.next_page_token; if (token) onLoadMore(token); }} disabled={loading} className="mt-4 px-3 py-2 bg-slate-800 text-white rounded-lg text-xs disabled:opacity-50">Load more</button>}

@@ -29,11 +29,17 @@ const summary: SummaryResponse = {
   negative_implications: ['Execution risk.'], disclaimer: 'Informational only.', provider: 'mock-llm',
 };
 const research: ResearchResponse = {
-  suggestions: [{ symbol: 'TCS', thesis: 'A cautious thesis.', risks: ['Competition'],
+  suggestions: [{ symbol: 'TCS', provider: 'mock-llm', thesis: 'A cautious thesis.', risks: ['Competition'],
     evidence_article_ids: ['article-1'], generated_at: '2026-11-08T10:00:00Z',
     reported_facts: ['A reported fact'], positive_implications: ['Potential benefit'],
     negative_implications: ['Potential downside'], uncertainty: 'Evidence is limited.', informational_only: true }],
   disclaimer: 'Not investment advice.',
+};
+const conversation = {
+  conversation_id: 'conversation-1', context_type: 'article' as const, context_reference: 'article-1',
+  context_title: 'TCS update', created_at: '2026-11-10T10:00:00Z',
+  messages: [{ role: 'user' as const, content: 'Why did margins decline?', provider: null, created_at: '2026-11-10T10:01:00Z' },
+    { role: 'assistant' as const, content: 'The report says costs rose.', provider: 'mock-llm', created_at: '2026-11-10T10:01:01Z' }],
 };
 function stubJson(body: unknown, status = 200) {
   const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => new Response(JSON.stringify(body), {
@@ -119,6 +125,24 @@ describe('React API contract', () => {
     const result = await api.getResearch('TCS');
     expect(result.suggestions[0].evidence_article_ids).toEqual(['article-1']);
     expect(result.disclaimer).toBe('Not investment advice.');
+  });
+
+  it('creates, restores, and continues a context-pinned conversation', async () => {
+    const fetchMock = stubJson(conversation, 201);
+    const created = await api.createConversation({ context_type: 'article', article_id: 'article-1', symbol: null, research_context: null });
+    expect(created).toEqual(conversation);
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/conversations');
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({ context_type: 'article', article_id: 'article-1', symbol: null, research_context: null });
+
+    stubJson(conversation);
+    expect(await api.getConversation(conversation.conversation_id)).toEqual(conversation);
+    const messageFetch = stubJson({ ...conversation, messages: [...conversation.messages,
+      { role: 'user', content: 'Is that serious?', provider: null, created_at: '2026-11-10T10:02:00Z' }] });
+    await api.sendConversationMessage(conversation.conversation_id, '00000000-0000-4000-8000-000000000007', 'Is that serious?');
+    expect(messageFetch.mock.calls[0][0]).toBe('/api/conversations/conversation-1/messages');
+    expect(JSON.parse(String(messageFetch.mock.calls[0][1]?.body))).toEqual({
+      request_id: '00000000-0000-4000-8000-000000000007', content: 'Is that serious?',
+    });
   });
 
   it('surfaces standardized API failures and rejects malformed success payloads', async () => {

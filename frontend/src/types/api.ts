@@ -19,5 +19,9 @@ export type NewsSearchResponse = components['schemas']['NewsSearchResponse'];
 export type SummaryResponse = components['schemas']['SummaryResponse'];
 export type ResearchSuggestion = components['schemas']['ResearchSuggestion'];
 export type ResearchResponse = components['schemas']['ResearchResponse'];
+export type ConversationCreateRequest = components['schemas']['ConversationCreateRequest'];
+export type ConversationMessageRequest = components['schemas']['ConversationMessageRequest'];
+export type ConversationTurn = components['schemas']['ConversationTurn'];
+export type ConversationResponse = components['schemas']['ConversationResponse'];
 export type ErrorResponse = components['schemas']['ErrorResponse'];
 

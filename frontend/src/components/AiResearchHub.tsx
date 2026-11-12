@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Sparkles, AlertTriangle, TrendingUp, Search, Loader2, ArrowUpRight, BookOpen } from 'lucide-react';
 import type { ResearchResponse } from '../types/api';
 import { api } from '../services/api';
+import { ConversationPanel } from './ConversationPanel';
 
 interface AiResearchHubProps { initialSymbol?: string; onTradeStock: (symbol: string) => void; }
 
@@ -35,6 +36,7 @@ export const AiResearchHub: React.FC<AiResearchHubProps> = ({ initialSymbol = ''
     {research?.suggestions.map((suggestion) => <section key={`${suggestion.symbol}-${suggestion.generated_at}`} className="space-y-4 mb-6">
       <div className="bg-slate-950 p-5 rounded-xl border border-slate-800">
         <div className="flex items-center justify-between gap-4 mb-3"><strong className="text-white">{suggestion.symbol} research</strong><button onClick={() => onTradeStock(suggestion.symbol)} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs"><ArrowUpRight className="inline w-3.5 h-3.5 mr-1" />Trade {suggestion.symbol}</button></div>
+        <p className="text-[10px] text-slate-500 mb-2">Provider: {suggestion.provider}</p>
         <p className="text-sm text-slate-200">{suggestion.thesis}</p>
         <p className="text-xs text-amber-300 mt-3"><strong>Uncertainty:</strong> {suggestion.uncertainty}</p>
         <p className="text-[10px] text-slate-500 mt-2">Generated {new Date(suggestion.generated_at).toLocaleString()} · Informational only</p>
@@ -49,6 +51,7 @@ export const AiResearchHub: React.FC<AiResearchHubProps> = ({ initialSymbol = ''
         <div className="flex items-center gap-2 font-bold mb-2"><BookOpen className="w-4 h-4 text-indigo-400" />Supporting article IDs</div>
         {suggestion.evidence_article_ids.length ? <ul className="list-disc pl-5">{suggestion.evidence_article_ids.map((id) => <li key={id}>{id}</li>)}</ul> : <p>No article references were returned.</p>}
       </div>
+      <ConversationPanel key={`${suggestion.symbol}:${suggestion.generated_at}`} context={{ context_type: 'research', article_id: null, symbol: suggestion.symbol, research_context: suggestion }} />
     </section>)}
     {research && <p className="text-[11px] text-slate-400 border-t border-slate-800 pt-3"><TrendingUp className="inline w-3.5 h-3.5 mr-1" />{research.disclaimer}</p>}
   </div>;

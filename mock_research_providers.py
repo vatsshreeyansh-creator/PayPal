@@ -2,8 +2,9 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 from news_provider import ArticleData, NewsPage
-from llm_provider import (ArticleInput, LLMProviderUnavailable, ResearchDraft,
-                          ResearchEvidence, SummaryDraft)
+from llm_provider import (ArticleInput, ConversationMessage, ConversationReply, LLMProviderUnavailable,
+                          ResearchDraft, ResearchEvidence, SummaryDraft, conversation_context_excerpt,
+                          prepare_conversation)
 
 
 class MockNewsProvider:
@@ -55,6 +56,18 @@ class MockLLMProvider:
             reported_facts=[fact],
             positive_implications=["Potential benefit is uncertain and requires independent verification."],
             negative_implications=["The article does not establish the size or durability of any impact."],
+        )
+
+    def converse(self, *, system_instructions: str, context: str,
+                 messages: list[ConversationMessage]) -> ConversationReply:
+        prepared = prepare_conversation(context, messages)
+        latest = prepared.messages[-1].content
+        prior = sum(message.role == "user" for message in prepared.messages) - 1
+        first_sentence = conversation_context_excerpt(context, limit=300).split(".")[0].strip()
+        return ConversationReply(
+            f"Based on the supplied context ({first_sentence}), I cannot verify a specific answer to "
+            f"“{latest}”. This reply includes {max(prior, 0)} earlier follow-up question(s); verify details against the source.",
+            self.provider_name,
         )
 
     def research_stock(self, *, symbol, current_price: Decimal | None,
