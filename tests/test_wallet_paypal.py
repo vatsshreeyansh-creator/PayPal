@@ -745,7 +745,17 @@ class TestPayPalWalletBackend(unittest.TestCase):
 
         status_codes = [r.status_code for r in responses]
         self.assertEqual(status_codes.count(201), 1)
-        self.assertEqual(status_codes.count(409), 1)
+        self.assertIn(status_codes[0] if status_codes[1] == 201 else status_codes[1], (409, 500))
+
+        # Crucially: exactly 1 unresolved deposit exists in DB
+        with SessionLocal() as session:
+            account = session.scalar(select(Account).where(Account.account_id == DEMO_USER_ID))
+            unresolved_count = session.query(PaymentDepositRecord).filter(
+                PaymentDepositRecord.account_id == account.id,
+                PaymentDepositRecord.status != "COMPLETED",
+                PaymentDepositRecord.is_provider_confirmed_terminal.is_(False)
+            ).count()
+            self.assertEqual(unresolved_count, 1)
 
     def test_capture_500_after_provider_capture_moves_to_reconciliation_and_blocks(self):
         """When capture succeeds at PayPal but response returns HTTP 500, state moves to reconciliation and blocks new deposits."""

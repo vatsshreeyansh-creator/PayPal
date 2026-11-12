@@ -187,6 +187,10 @@ def claim_deposit_for_order_creation(session: Session, deposit_id: str) -> tuple
 def bind_paypal_order(session: Session, deposit_id: str, paypal_order_id: str,
                       approval_url: str | None = None) -> PaymentDepositRecord:
     """Binds the created external PayPal order ID to the local deposit intent."""
+    connection = session.connection()
+    if connection.dialect.name == "sqlite":
+        connection.exec_driver_sql("BEGIN IMMEDIATE")
+
     deposit = session.scalar(select(PaymentDepositRecord).where(PaymentDepositRecord.deposit_id == deposit_id))
     if deposit is None:
         raise DepositNotFound("Deposit record was not found")
