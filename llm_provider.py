@@ -536,6 +536,7 @@ class GroqOpenSourceLLMProvider:
             headers={
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.api_key}",
+                "User-Agent": "TradePoint/1.0",
             },
         )
 
@@ -664,6 +665,7 @@ class HuggingFaceOpenSourceLLMProvider:
             headers={
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.api_key}",
+                "User-Agent": "TradePoint/1.0",
             },
         )
 
